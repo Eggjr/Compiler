@@ -1,3 +1,6 @@
 [workspace]
-members = ["etac", "lexer"]
+members = [
+    "etac", 
+    "lexer",
+]
 resolver="3"

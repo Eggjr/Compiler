@@ -3,9 +3,8 @@ use std::process;
 use lexer::lexer;
 
 fn main() {
-    let args : Vec<String> = env::args().collect();
-    let config = parse_args(&args);
-    config.handle_config();
+    let config = Config::build(env::args().collect());
+    config.handle_config()
 }
 
 #[derive(Debug)]
@@ -19,12 +18,60 @@ struct Config{
 }
 
 impl Config{
-    fn handle_config(&self) -> (){
+    fn build(args : Vec<String>) -> Config{
+        if args.len() == 1{
+            eprintln!("Problem: Not enough arguments");
+            print_help();
+        }
+        let mut config = Config{
+            help:false,
+            lex:false,
+            parse:false,
+            code_gen:false,
+            path:String::from(""), 
+            source_files: vec![]
+        };
+        for mut i in 1 .. args.len(){
+            match args[i].as_str() {
+                "--help" => {
+                    config.help = true;
+                }
+                "--lex" => {
+                    config.lex = true;
+                }
+                "-D" => {
+                    i += 1;
+                    if i < args.len(){
+                        config.path = args[i].clone();
+                    }
+                }
+                file =>{
+                    config.source_files.push(String::from(file));
+                }
+            }
+        }
+        return config;
+    }
+
+    fn handle_config(&self){
         if self.source_files.is_empty() || self.help{
             print_help();
         }
         else if self.lex{
-            lexer::lex_files(&self.source_files, &self.path);
+            if let Err(value) = lexer::lex_files(&self.source_files, &self.path){
+                match value{
+                    lexer::LexerError::InvalidFilesError(files) => {
+                            eprintln!("Invalid files given: {:?}", files);
+                        eprintln!("Please ensure files given have ending \".eti\" or \".eta\"");
+                        process::exit(1);
+                    }
+                    lexer::LexerError::IOError(file, error) => {
+                        eprintln!("Tried reading file: {}, but failed with error: {}", file, error);
+                        process::exit(1);
+                    }
+                }
+            }
+
         }
         else if self.parse{
             unimplemented!("I haven't implemented this yet.");
@@ -48,44 +95,4 @@ fn print_help(){
                 , "--help", "--lex", "-D <path>"
             );
     process::exit(1);
-}
-
-fn parse_args(args : &Vec<String>) -> Config{
-    if args.len() == 1{
-        eprintln!("Problem: Not enough arguments");
-        print_help();
-    }
-    let mut config = Config{
-        help:false,
-        lex:false,
-        parse:false,
-        code_gen:false,
-        path:String::from(""), 
-        source_files:vec![]
-    };
-    for mut i in 1 .. args.len(){
-        match args[i].as_str() {
-            "--help" => {
-                config.help = true;
-            }
-            "--lex" => {
-                config.lex = true;
-            }
-            "-D" => {
-                i += 1;
-                if i < args.len(){
-                    config.path = args[i].clone();
-                }
-            }
-            _ =>{
-                if i == args.len() - 1{
-                    config.source_files.push(args[i].clone());
-                }
-                else{
-                    eprintln!("")
-                }
-            }
-        }
-    }
-    return config;
 }
