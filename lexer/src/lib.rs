@@ -266,7 +266,7 @@ pub mod lexer{
         fn lex_key_or_identifier(&mut self){
             let first = self.index - 1;
             while let Some(c) = self.stream.peek(){
-                if !(c.is_ascii_alphanumeric() || c == '.'){
+                if !(c.is_ascii_alphanumeric() || c == '_' || c == '\''){
                     break;
                 }
                 else{
