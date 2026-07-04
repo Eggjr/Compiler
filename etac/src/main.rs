@@ -1,6 +1,8 @@
 use std::env;
 use std::process;
 use lexer::lexer;
+use std::path::PathBuf;
+use std::io;
 
 fn main() {
     let config = Config::build(env::args().collect());
@@ -13,7 +15,7 @@ struct Config{
     lex : bool,
     parse : bool,
     code_gen : bool,
-    path : String,
+    path : PathBuf,
     source_files : Vec<String>
 }
 
@@ -28,10 +30,17 @@ impl Config{
             lex:false,
             parse:false,
             code_gen:false,
-            path:String::from(""), 
+            path: match env::current_dir(){
+                io::Result::Ok(path) => path,
+                io::Resut::Err(e) => {
+                    eprintln!("Issue with specified path: {}", e);
+                    process::exit(1);
+                }
+            }, 
             source_files: vec![]
         };
-        for mut i in 1 .. args.len(){
+        let mut i = 0;
+        while i < args.len(){
             match args[i].as_str() {
                 "--help" => {
                     config.help = true;
@@ -42,7 +51,7 @@ impl Config{
                 "-D" => {
                     i += 1;
                     if i < args.len(){
-                        config.path = args[i].clone();
+                        config.path = PathBuf::from(args[i].clone());
                     }
                 }
                 file =>{
@@ -58,15 +67,19 @@ impl Config{
             print_help();
         }
         else if self.lex{
-            if let Err(value) = lexer::lex_files(&self.source_files, &self.path){
+            if let Err(value) = lexer::lex_files(&self.source_files, self.path){
+                use lexer::LexerError;
                 match value{
-                    lexer::LexerError::InvalidFilesError(files) => {
+                    LexerError::InvalidFilesError(files) => {
                             eprintln!("Invalid files given: {:?}", files);
                         eprintln!("Please ensure files given have ending \".eti\" or \".eta\"");
                         process::exit(1);
-                    }
-                    lexer::LexerError::IOError(file, error) => {
+                    },
+                    LexerError::IOError(file, error) => {
                         eprintln!("Tried reading file: {}, but failed with error: {}", file, error);
+                        process::exit(1);
+                    },
+                    _ => {
                         process::exit(1);
                     }
                 }
@@ -80,7 +93,7 @@ impl Config{
             unimplemented!("I haven't implemented this yet either.");
         }
         else{
-            panic!("Somehow you forgot abotu a config case. Config: {:?}", self)
+            panic!("Somehow you forgot about a config case. Config: {:?}", self)
         }
     }
 }
