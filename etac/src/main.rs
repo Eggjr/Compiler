@@ -1,8 +1,8 @@
-use std::env;
-use std::process;
 use lexer::lexer;
-use std::path::PathBuf;
+use std::env;
 use std::io;
+use std::path::PathBuf;
+use std::process;
 
 fn main() {
     let config = Config::build(env::args().collect());
@@ -10,37 +10,37 @@ fn main() {
 }
 
 #[derive(Debug)]
-struct Config{
-    help : bool,
-    lex : bool,
-    parse : bool,
-    code_gen : bool,
-    path : PathBuf,
-    source_files : Vec<String>
+struct Config {
+    help: bool,
+    lex: bool,
+    parse: bool,
+    code_gen: bool,
+    path: PathBuf,
+    source_files: Vec<String>,
 }
 
-impl Config{
-    fn build(args : Vec<String>) -> Config{
-        if args.len() == 1{
+impl Config {
+    fn build(args: Vec<String>) -> Config {
+        if args.len() == 1 {
             eprintln!("Problem: Not enough arguments");
             print_help();
         }
-        let mut config = Config{
-            help:false,
-            lex:false,
-            parse:false,
-            code_gen:false,
-            path: match env::current_dir(){
+        let mut config = Config {
+            help: false,
+            lex: false,
+            parse: false,
+            code_gen: false,
+            path: match env::current_dir() {
                 io::Result::Ok(path) => path,
                 io::Resut::Err(e) => {
                     eprintln!("Issue with specified path: {}", e);
                     process::exit(1);
                 }
-            }, 
-            source_files: vec![]
+            },
+            source_files: vec![],
         };
         let mut i = 0;
-        while i < args.len(){
+        while i < args.len() {
             match args[i].as_str() {
                 "--help" => {
                     config.help = true;
@@ -50,11 +50,11 @@ impl Config{
                 }
                 "-D" => {
                     i += 1;
-                    if i < args.len(){
+                    if i < args.len() {
                         config.path = PathBuf::from(args[i].clone());
                     }
                 }
-                file =>{
+                file => {
                     config.source_files.push(String::from(file));
                 }
             }
@@ -62,50 +62,55 @@ impl Config{
         return config;
     }
 
-    fn handle_config(&self){
-        if self.source_files.is_empty() || self.help{
+    fn handle_config(&self) {
+        if self.source_files.is_empty() || self.help {
             print_help();
-        }
-        else if self.lex{
-            if let Err(value) = lexer::lex_files(&self.source_files, self.path){
+        } else if self.lex {
+            if let Err(errors) = lexer::lex_files(self.source_files, self.path) {
                 use lexer::LexerError;
-                match value{
-                    LexerError::InvalidFilesError(files) => {
+                for e in errors {
+                    match e {
+                        LexerError::InvalidFilesError(files) => {
                             eprintln!("Invalid files given: {:?}", files);
-                        eprintln!("Please ensure files given have ending \".eti\" or \".eta\"");
-                        process::exit(1);
-                    },
-                    LexerError::IOError(file, error) => {
-                        eprintln!("Tried reading file: {}, but failed with error: {}", file, error);
-                        process::exit(1);
-                    },
-                    _ => {
-                        process::exit(1);
+                            eprintln!("Please ensure files given have ending \".eti\" or \".eta\"");
+                        }
+                        LexerError::IOError(file, error) => println!(
+                            "Tried reading file: {}, but failed with error: {}",
+                            file, error
+                        ),
+                        LexerError::WorldBroken(msg)
+                        | LexerError::UnexpectedCharacterConstant(msg)
+                        | LexerError::NoMoreTokens(msg)
+                        | LexerError::UnclosedString(msg)
+                        | LexerError::UnexpectedHexEscape(msg)
+                        | LexerError::UnexpectedEscapeSequence(msg)
+                        | LexerError::UnclosedCharacter(msg)
+                        | LexerError::IntegerTooLarge(msg) => {
+                            eprintln!("{}", e);
+                        }
                     }
                 }
+                process::exit(1);
             }
-
-        }
-        else if self.parse{
+        } else if self.parse {
             unimplemented!("I haven't implemented this yet.");
-        }
-        else if self.code_gen{
+        } else if self.code_gen {
             unimplemented!("I haven't implemented this yet either.");
-        }
-        else{
+        } else {
             panic!("Somehow you forgot about a config case. Config: {:?}", self)
         }
     }
 }
 
-fn print_help(){
+fn print_help() {
     let pad_width = 15;
-    println!("Usage: cargo run [options] <source_files>\n\t\
-                Where possible options include:\n\t\
-                {:<pad_width$} gives a synopsis of useful options\n\t\
-                {:<pad_width$} lexes filename.eta and produces filename.lexed\n\t\
-                {:<pad_width$} specify where to place generated diagnostic files"
-                , "--help", "--lex", "-D <path>"
-            );
+    println!(
+        "Usage: cargo run [options] <source_files>\n\t\
+        Where possible options include:\n\t\
+        {:<pad_width$} gives a synopsis of useful options\n\t\
+        {:<pad_width$} lexes filename.eta and produces filename.lexed\n\t\
+        {:<pad_width$} specify where to place generated diagnostic files",
+        "--help", "--lex", "-D <path>"
+    );
     process::exit(1);
 }

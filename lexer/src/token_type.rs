@@ -1,41 +1,41 @@
-pub mod token_type{
+pub mod token_type {
     use std::fmt;
 
     #[derive(Debug, Clone)]
-    pub enum TokenType{
+    pub enum TokenType {
         Identifier(String),
         Integer(u64),
         Character(char),
         String(String),
-        LParen, // (
-        RParen, // )
-        LBracket, // [
-        RBracket, // ]
-        LBrace, // {
-        RBrace, // }
-        LAngle, // <
-        RAngle, // >
-        Semicolon, // ;
-        Colon, // :
-        Plus, // +
-        Times, // *
+        LParen,             // (
+        RParen,             // )
+        LBracket,           // [
+        RBracket,           // ]
+        LBrace,             // {
+        RBrace,             // }
+        LAngle,             // <
+        RAngle,             // >
+        Semicolon,          // ;
+        Colon,              // :
+        Plus,               // +
+        Times,              // *
         HighMultiplication, // *>>
-        Minus, // -
-        Divide, // /
-        Mod, // %
-        EQ, // ==
-        NE, // !=
-        LE, // <=
-        GE, // >=
-        Assign, // =
-        And, // &
-        Or, // |
-        Exclamation, // !
-        Period, // .
-        Comma, // ,
-        Question, // ?
-        Underscore, // _
-        Int, 
+        Minus,              // -
+        Divide,             // /
+        Mod,                // %
+        EQ,                 // ==
+        NE,                 // !=
+        LE,                 // <=
+        GE,                 // >=
+        Assign,             // =
+        And,                // &
+        Or,                 // |
+        Exclamation,        // !
+        Period,             // .
+        Comma,              // ,
+        Question,           // ?
+        Underscore,         // _
+        Int,
         Bool,
         True,
         False,
@@ -46,12 +46,12 @@ pub mod token_type{
         Return,
         Length,
         // EOF, // end_of_file
-        Error(String)
+        Error(String),
     }
 
-    impl fmt::Display for TokenType{
-        fn fmt(&self, f : &mut fmt::Formatter<'_>) -> fmt::Result{
-            let to_write = match self{
+    impl fmt::Display for TokenType {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            let to_write = match self {
                 TokenType::Identifier(id) => format!("id {}", id),
                 TokenType::Integer(val) => format!("integer {}", val),
                 TokenType::Character(c) => format!("character {}", c.to_string()),
@@ -95,7 +95,7 @@ pub mod token_type{
                 TokenType::Return => String::from("return"),
                 TokenType::Length => String::from("length"),
                 // TokenType::EOF => String::from("EOF: You Shouldn't see this"), // end_of_file
-                TokenType::Error(msg) => format!("error: {}", msg)
+                TokenType::Error(msg) => format!("error: {}", msg),
             };
             return write!(f, "{}", to_write);
         }
