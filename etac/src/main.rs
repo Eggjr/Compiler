@@ -65,6 +65,7 @@ impl Config {
                     config.source_files.push(String::from(file));
                 }
             }
+            i += 1;
         }
         return config;
     }
