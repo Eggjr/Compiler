@@ -1,4 +1,5 @@
-use lexer::lexer;
+use lexer;
+use lexer::LexerError;
 use std::env;
 use std::io;
 use std::path::PathBuf;
@@ -32,7 +33,7 @@ impl Config {
             code_gen: false,
             path: match env::current_dir() {
                 io::Result::Ok(path) => path,
-                io::Resut::Err(e) => {
+                io::Result::Err(e) => {
                     eprintln!("Issue with specified path: {}", e);
                     process::exit(1);
                 }
@@ -40,21 +41,27 @@ impl Config {
             source_files: vec![],
         };
         let mut i = 0;
+        let mut seen_file = false;
         while i < args.len() {
             match args[i].as_str() {
-                "--help" => {
+                "--help" if handle_option_after_file(seen_file) => {
                     config.help = true;
                 }
-                "--lex" => {
+                "--lex" if handle_option_after_file(seen_file) => {
                     config.lex = true;
                 }
-                "-D" => {
+                "-D" if handle_option_after_file(seen_file) => {
+                    if seen_file {
+                        eprintln!("Cannot specify options after source files");
+                        process::exit(1);
+                    }
                     i += 1;
                     if i < args.len() {
                         config.path = PathBuf::from(args[i].clone());
                     }
                 }
                 file => {
+                    seen_file = true;
                     config.source_files.push(String::from(file));
                 }
             }
@@ -62,35 +69,39 @@ impl Config {
         return config;
     }
 
-    fn handle_config(&self) {
+    fn handle_config(self) {
         if self.source_files.is_empty() || self.help {
             print_help();
         } else if self.lex {
-            if let Err(errors) = lexer::lex_files(self.source_files, self.path) {
-                use lexer::LexerError;
-                for e in errors {
-                    match e {
-                        LexerError::InvalidFilesError(files) => {
-                            eprintln!("Invalid files given: {:?}", files);
-                            eprintln!("Please ensure files given have ending \".eti\" or \".eta\"");
-                        }
-                        LexerError::IOError(file, error) => println!(
-                            "Tried reading file: {}, but failed with error: {}",
-                            file, error
-                        ),
-                        LexerError::WorldBroken(msg)
-                        | LexerError::UnexpectedCharacterConstant(msg)
-                        | LexerError::NoMoreTokens(msg)
-                        | LexerError::UnclosedString(msg)
-                        | LexerError::UnexpectedHexEscape(msg)
-                        | LexerError::UnexpectedEscapeSequence(msg)
-                        | LexerError::UnclosedCharacter(msg)
-                        | LexerError::IntegerTooLarge(msg) => {
-                            eprintln!("{}", e);
+            let tokens_paths = match lexer::lex_files(
+                self.source_files,
+                self.path,
+            ) {
+                Err(errors) => {
+                    for e in errors {
+                        match e {
+                            LexerError::InvalidFilesError(files) => {
+                                eprintln!("Invalid files given: {:?}", files);
+                                eprintln!(
+                                    "Please ensure files given have ending \".eti\" or \".eta\""
+                                );
+                            }
+                            LexerError::IOError(file, error) => eprintln!(
+                                "Tried reading file: {}, but failed with error: {}",
+                                file, error
+                            ),
+                            LexerError::ErrorToken(msg) => eprintln!("{}", msg),
                         }
                     }
+                    process::exit(1);
                 }
-                process::exit(1);
+                Ok(t) => t,
+            };
+            for (mut token_stream, path) in tokens_paths {
+                if let Err(e) = lexer::write_to_file(&mut token_stream, path) {
+                    eprintln!("{:?}", e);
+                    process::exit(1);
+                }
             }
         } else if self.parse {
             unimplemented!("I haven't implemented this yet.");
@@ -113,4 +124,12 @@ fn print_help() {
         "--help", "--lex", "-D <path>"
     );
     process::exit(1);
+}
+
+fn handle_option_after_file(seen: bool) -> bool {
+    if seen {
+        eprintln!("Cannot specify options after source files");
+        process::exit(1);
+    }
+    !seen
 }
