@@ -1,16 +1,13 @@
 use crate::token::Token;
-use crate::token_scanner::HexLexError::UnexpectedHexEscape;
 use crate::token_type::TokenType;
 use std::iter::Peekable;
 use std::str::Chars;
 
 #[derive(Debug)]
-pub enum HexLexError {
-    UnexpectedHexEscape(String),
-}
+struct UnexpectedHexEscape(String);
 
 #[derive(Debug, Clone)]
-pub struct TokenScanner<'a> {
+pub(crate) struct TokenScanner<'a> {
     stream: Peekable<Chars<'a>>,
     input_text: &'a str,
     line: usize,
@@ -19,10 +16,10 @@ pub struct TokenScanner<'a> {
 }
 
 impl<'a> TokenScanner<'a> {
-    pub fn build(input_text: &'a str) -> TokenScanner<'a> {
+    pub(crate) fn new(input_text: &'a str) -> TokenScanner<'a> {
         TokenScanner {
             line: 1,
-            column: 1,
+            column: 0,
             index: 0,
             stream: input_text.chars().peekable(),
             input_text,
@@ -33,24 +30,36 @@ impl<'a> TokenScanner<'a> {
         Token::new(self.line, self.column, ttype)
     }
 
+    fn create_token_col(&self, column: usize, ttype: TokenType) -> Token {
+        Token::new(self.line, column, ttype)
+    }
+
     fn consume(&mut self) -> Option<char> {
         if let Some(c) = self.stream.next() {
             self.index += c.len_utf8();
             match c {
                 '\n' => {
                     self.line += 1;
-                    self.column = 1;
+                    self.column = 0;
                     return None;
                 }
                 '\r' => {
-                    if let Some(newline) = self.stream.peek() {
-                        if *newline == '\n' {
-                            self.stream.next();
-                            self.index += 1 // '\n'.len_utf8() == 1
-                        }
+                    if let Some(newline) = self.stream.peek()
+                        && *newline == '\n'
+                    {
+                        self.stream.next();
+                        self.index += 1 // '\n'.len_utf8() == 1
                     }
                     self.line += 1;
-                    self.column = 1;
+                    self.column = 0;
+                    return None;
+                }
+                '\t' => {
+                    self.column += 2;
+                    return None;
+                }
+                ' ' => {
+                    self.column += 1;
                     return None;
                 }
                 other => {
@@ -82,7 +91,6 @@ impl<'a> TokenScanner<'a> {
     }
 
     fn lex_slash(&mut self) -> Option<Token> {
-        self.consume();
         match self.stream.peek() {
             Some('/') => {
                 self.consume_comment();
@@ -92,15 +100,46 @@ impl<'a> TokenScanner<'a> {
         }
     }
 
-    fn hex_to_char(&mut self) -> Result<char, HexLexError> {
+    fn lex_star(&mut self) -> Token {
+        let start_col = self.column;
+        if let Some('>') = self.stream.peek() {
+            let _ = self.consume();
+            match self.consume() {
+                Some('>') => {
+                    return self.create_token_col(start_col, TokenType::HighMultiplication);
+                }
+                Some(non_rangle) => {
+                    return self.create_token_col(
+                        start_col,
+                        TokenType::Error(format!(
+                            "Expected > to finish High Multiplication token but received {}",
+                            non_rangle
+                        )),
+                    );
+                }
+                None => {
+                    return self.create_token_col(
+                        start_col,
+                        TokenType::Error(
+                            "Expected > to finish High Mulitplication Token but found nothing"
+                                .to_string(),
+                        ),
+                    );
+                }
+            }
+        }
+        self.create_token(TokenType::Times)
+    }
+
+    fn hex_to_char(&mut self) -> Result<char, UnexpectedHexEscape> {
         let mut res: String = String::from("");
+        let start_col = self.column;
         match self.consume() {
             Some('{') => (),
             _ => {
                 return Err(UnexpectedHexEscape(format!(
                     "Expected {{ to begin Unicode Character hex value hex at {}:{}",
-                    self.line - 1,
-                    self.column
+                    self.line, start_col
                 )));
             }
         };
@@ -134,17 +173,19 @@ impl<'a> TokenScanner<'a> {
         }
         Err(UnexpectedHexEscape(format!(
             "Expected }} to end Unicode Character value hex at {}:{}",
-            self.line - 1,
-            self.column
+            self.line, start_col
         )))
     }
 
     fn lex_character(&mut self) -> Token {
+        let start_col = self.column;
         let val = match self.consume() {
             Some('\\') => match self.consume() {
                 Some('x') => match self.hex_to_char() {
                     Ok(c) => c,
-                    Err(HexLexError::UnexpectedHexEscape(e)) => return self.create_token(TokenType::Error(format!("{:?}", e))),
+                    Err(UnexpectedHexEscape(e)) => {
+                        return self.create_token(TokenType::Error(format!("{:?}", e)));
+                    }
                 },
                 Some('n') => '\n',
                 Some('r') => '\r',
@@ -153,58 +194,68 @@ impl<'a> TokenScanner<'a> {
                 Some('\"') => '\"',
                 Some('\\') => '\\',
                 Some(c) => {
-                    return self.create_token(TokenType::Error(format!(
-                        "Unexpected Escape Sequence found: \\{}",
-                        c
-                    )));
+                    return self.create_token_col(
+                        start_col,
+                        TokenType::Error(format!("Unexpected Escape Sequence found: \\{}", c)),
+                    );
                 }
                 None => {
-                    return self.create_token(TokenType::Error(String::from(
+                    return self.create_token_col(start_col, TokenType::Error(String::from(
                         "Unfinished Escape Seqeunce. Expected literal to terminate with <escape>\' but got nothing",
                     )));
                 }
             },
             Some('\'') => {
-                return self.create_token(TokenType::Error(String::from("No Character Given")));
+                return self.create_token_col(
+                    start_col,
+                    TokenType::Error(String::from("No Character Given")),
+                );
             }
             Some(c) => c,
             None => {
-                return self.create_token(TokenType::Error(String::from(
-                    "Expected character literal to be closed with \' but got nothing",
-                )));
+                return self.create_token_col(
+                    start_col,
+                    TokenType::Error(String::from(
+                        "Expected character literal to be closed with \' but got nothing",
+                    )),
+                );
             }
         };
         if let Some(c) = self.consume() {
             match c {
                 '\'' => {
-                    return self.create_token(TokenType::Character(val));
+                    return self.create_token_col(start_col, TokenType::Character(val));
                 }
                 c => {
-                    return self.create_token(TokenType::Error(format!(
-                        "Expected character literal to be closed with \' but got {}",
-                        c
-                    )));
+                    return self.create_token_col(
+                        start_col,
+                        TokenType::Error(format!(
+                            "Expected character literal to be closed with \' but got {}",
+                            c
+                        )),
+                    );
                 }
             }
         }
-        return self.create_token(TokenType::Error(String::from(
+        self.create_token_col(start_col, TokenType::Error(String::from(
             "Unfinished Escape Seqeunce. Expected literal to terminate with <escape>\' but got nothing",
-        )));
+        )))
     }
 
     fn lex_string(&mut self) -> Token {
         let mut contents = String::new();
-        let start_col = self.column - 1;
+        let start_col = self.column;
         while let Some(c) = self.consume() {
             match c {
                 '\"' => {
-                    return Token::new(self.line, start_col, TokenType::String(contents));
+                    return self.create_token_col(start_col, TokenType::String(contents));
                 }
                 '\\' => match self.stream.peek() {
                     Some('x') => contents.push(match self.hex_to_char() {
                         Ok(c) => c,
-                        Err(HexLexError::UnexpectedHexEscape(e)) => {
-                            return self.create_token(TokenType::Error(format!("{:?}", e)));
+                        Err(UnexpectedHexEscape(e)) => {
+                            return self
+                                .create_token_col(start_col, TokenType::Error(format!("{:?}", e)));
                         }
                     }),
                     _ => contents.push(c), //if not a hex escape add the backslash
@@ -214,18 +265,20 @@ impl<'a> TokenScanner<'a> {
                 }
             }
         }
-        return self.create_token(TokenType::Error(format!(
-            "Expected \" to close String at {}:{}",
-            self.line,
-            self.column - 1
-        )));
+        self.create_token_col(
+            start_col,
+            TokenType::Error(format!(
+                "Expected \" to close String at {}:{}",
+                self.line, start_col
+            )),
+        )
     }
 
     fn lex_langle(&mut self) -> Token {
         let token: Token;
         match self.stream.peek() {
             Some('=') => {
-                token = self.create_token(TokenType::LE);
+                token = self.create_token_col(self.column - 1, TokenType::LE);
                 self.consume();
             }
             _ => token = self.create_token(TokenType::LAngle),
@@ -237,7 +290,7 @@ impl<'a> TokenScanner<'a> {
         let token: Token;
         match self.stream.peek() {
             Some('=') => {
-                token = self.create_token(TokenType::GE);
+                token = self.create_token_col(self.column - 1, TokenType::GE);
                 self.consume();
             }
             _ => token = self.create_token(TokenType::RAngle),
@@ -249,7 +302,7 @@ impl<'a> TokenScanner<'a> {
         let token: Token;
         match self.stream.peek() {
             Some('=') => {
-                token = self.create_token(TokenType::NE);
+                token = self.create_token_col(self.column - 1, TokenType::NE);
                 self.consume();
             }
             _ => token = self.create_token(TokenType::Exclamation),
@@ -261,7 +314,7 @@ impl<'a> TokenScanner<'a> {
         let token: Token;
         match self.stream.peek() {
             Some('=') => {
-                token = self.create_token(TokenType::EQ);
+                token = self.create_token_col(self.column - 1, TokenType::EQ);
                 self.consume();
             }
             _ => token = self.create_token(TokenType::Assign),
@@ -269,8 +322,9 @@ impl<'a> TokenScanner<'a> {
         token
     }
 
-    fn lex_integer(&mut self) -> Token {
-        let first = self.index - 1;
+    fn lex_integer(&mut self, ch: char) -> Token {
+        let first = self.index - ch.len_utf8();
+        let start_col = self.column;
         while let Some(c) = self.stream.peek() {
             if !c.is_ascii_digit() {
                 break;
@@ -279,19 +333,22 @@ impl<'a> TokenScanner<'a> {
             }
         }
         //Handle i64 bounds in the parser
-        return self.create_token(TokenType::Integer(
-            match self.input_text[first..self.index].parse::<u64>() {
+        self.create_token_col(
+            start_col,
+            TokenType::Integer(match self.input_text[first..self.index].parse::<u64>() {
                 Ok(val) => val,
                 Err(e) => {
-                    return self
-                        .create_token(TokenType::Error(format!("Trouble Parsing int: {:?}", e)));
+                    return self.create_token_col(
+                        start_col,
+                        TokenType::Error(format!("Trouble Parsing int: {:?}", e)),
+                    );
                 }
-            },
-        ));
+            }),
+        )
     }
 
-    fn lex_key_or_identifier(&mut self) -> Token {
-        let first = self.index - 1;
+    fn lex_key_or_identifier(&mut self, ch: char) -> Token {
+        let first = self.index - ch.len_utf8();
         while let Some(c) = self.stream.peek() {
             if !(c.is_ascii_alphanumeric() || *c == '_' || *c == '\'') {
                 break;
@@ -312,10 +369,10 @@ impl<'a> TokenScanner<'a> {
             "else" => TokenType::Else,
             identifier => TokenType::Identifier(identifier.to_string()),
         };
-        return self.create_token(ttype);
+        Token::new(self.line, first + 1, ttype)
     }
 
-    pub fn next_token(&mut self) -> Option<Token> {
+    pub(crate) fn next_token(&mut self) -> Option<Token> {
         self.remove_whitespace();
         if let Some(c) = self.consume() {
             let token = match c {
@@ -332,11 +389,11 @@ impl<'a> TokenScanner<'a> {
                 ':' => self.create_token(TokenType::Colon),
                 '+' => self.create_token(TokenType::Plus),
                 '-' => self.create_token(TokenType::Minus),
-                '*' => self.create_token(TokenType::Times),
                 '%' => self.create_token(TokenType::Mod),
                 '&' => self.create_token(TokenType::And),
                 '|' => self.create_token(TokenType::Or),
                 '_' => self.create_token(TokenType::Underscore),
+                '*' => self.lex_star(),
                 '!' => self.lex_exclamation(),
                 '<' => self.lex_langle(),
                 '>' => self.lex_rangle(),
@@ -349,9 +406,9 @@ impl<'a> TokenScanner<'a> {
                 '\'' => self.lex_character(),
                 other => {
                     if other.is_ascii_digit() {
-                        self.lex_integer()
+                        self.lex_integer(other)
                     } else if other.is_ascii_alphabetic() {
-                        self.lex_key_or_identifier()
+                        self.lex_key_or_identifier(other)
                     } else {
                         self.create_token(TokenType::Error(format!(
                             "Unexpected character: {}",
@@ -363,5 +420,97 @@ impl<'a> TokenScanner<'a> {
             return Some(token);
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    const WHITESPACE: &str = "1\r\n2\n3\r4\t5 ";
+    const INPUT_TEXT: &str =
+        "i : int = 0\r\nz:int=1+2+3\ns: int[] = \"Hello\"\nb:bool, i:int = f(x)";
+
+    #[test]
+    fn test_consume_whitespace() {
+        let mut scanner: TokenScanner<'_> = TokenScanner::new(WHITESPACE);
+        assert!(
+            scanner.line == 1 && scanner.column == 0 && scanner.index == 0,
+            "Debug Info:{scanner:?}"
+        );
+        assert!(
+            scanner.consume() == Some('1')
+                && scanner.line == 1
+                && scanner.column == 1
+                && scanner.index == 1,
+            "Debug Info:{scanner:?}"
+        );
+        assert!(
+            scanner.consume() == None
+                && scanner.line == 2
+                && scanner.column == 0
+                && scanner.index == 3,
+            "Debug Info:{scanner:?}"
+        );
+        assert!(
+            scanner.consume() == Some('2')
+                && scanner.line == 2
+                && scanner.column == 1
+                && scanner.index == 4,
+            "Debug Info:{scanner:?}"
+        );
+        assert!(
+            scanner.consume() == None
+                && scanner.line == 3
+                && scanner.column == 0
+                && scanner.index == 5,
+            "Debug Info:{scanner:?}"
+        );
+        assert!(
+            scanner.consume() == Some('3')
+                && scanner.line == 3
+                && scanner.column == 1
+                && scanner.index == 6,
+            "Debug Info:{scanner:?}"
+        );
+        assert!(
+            scanner.consume() == None
+                && scanner.line == 4
+                && scanner.column == 0
+                && scanner.index == 7,
+            "Debug Info:{scanner:?}"
+        );
+        assert!(
+            scanner.consume() == Some('4')
+                && scanner.line == 4
+                && scanner.column == 1
+                && scanner.index == 8,
+            "Debug Info:{scanner:?}"
+        );
+        assert!(
+            scanner.consume() == None
+                && scanner.line == 4
+                && scanner.column == 3
+                && scanner.index == 9,
+            "Debug Info:{scanner:?}"
+        );
+        assert!(
+            scanner.consume() == Some('5')
+                && scanner.line == 4
+                && scanner.column == 4
+                && scanner.index == 10,
+            "Debug Info:{scanner:?}"
+        );
+        assert!(
+            scanner.consume() == None
+                && scanner.line == 4
+                && scanner.column == 5
+                && scanner.index == 11,
+            "Debug Info: {scanner:?}"
+        );
+    }
+
+    #[test]
+    fn test_consume() {
+        let mut _scanner: TokenScanner<'_> = TokenScanner::new(&INPUT_TEXT);
     }
 }

@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TokenType {
     Identifier(String),
     Integer(u64),
@@ -52,8 +52,8 @@ impl fmt::Display for TokenType {
         let to_write = match self {
             TokenType::Identifier(id) => format!("id {}", id),
             TokenType::Integer(val) => format!("integer {}", val),
-            TokenType::Character(c) => format!("character {}", c.to_string()),
-            TokenType::String(literal) => format!("string {}", literal.to_string()),
+            TokenType::Character(c) => format!("character {}", c),
+            TokenType::String(literal) => format!("string {}", literal),
             TokenType::LParen => String::from("("),
             TokenType::RParen => String::from(")"),
             TokenType::LBracket => String::from("["),
@@ -94,6 +94,6 @@ impl fmt::Display for TokenType {
             TokenType::Length => String::from("length"),
             TokenType::Error(msg) => format!("error: {}", msg),
         };
-        return write!(f, "{}", to_write);
+        write!(f, "{}", to_write)
     }
 }
