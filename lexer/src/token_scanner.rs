@@ -30,8 +30,8 @@ impl<'a> TokenScanner<'a> {
         Token::new(self.line, self.column, ttype)
     }
 
-    fn create_token_col(&self, column: usize, ttype: TokenType) -> Token {
-        Token::new(self.line, column, ttype)
+    fn create_token_col(&self, col: usize, ttype: TokenType) -> Token {
+        Token::new(self.line, col, ttype)
     }
 
     fn consume(&mut self) -> Option<char> {
@@ -41,26 +41,28 @@ impl<'a> TokenScanner<'a> {
                 '\n' => {
                     self.line += 1;
                     self.column = 0;
-                    return None;
+                    return Some('\n');
                 }
                 '\r' => {
+                    let mut c_to_return = '\r';
                     if let Some(newline) = self.stream.peek()
                         && *newline == '\n'
                     {
                         self.stream.next();
-                        self.index += 1 // '\n'.len_utf8() == 1
+                        self.index += 1; // '\n'.len_utf8() == 1
+                        c_to_return = '\n';
                     }
                     self.line += 1;
                     self.column = 0;
-                    return None;
+                    return Some(c_to_return);
                 }
                 '\t' => {
                     self.column += 2;
-                    return None;
+                    return Some('\t');
                 }
                 ' ' => {
                     self.column += 1;
-                    return None;
+                    return Some(' ');
                 }
                 other => {
                     self.column += 1;
@@ -251,13 +253,18 @@ impl<'a> TokenScanner<'a> {
                     return self.create_token_col(start_col, TokenType::String(contents));
                 }
                 '\\' => match self.stream.peek() {
-                    Some('x') => contents.push(match self.hex_to_char() {
-                        Ok(c) => c,
-                        Err(UnexpectedHexEscape(e)) => {
-                            return self
-                                .create_token_col(start_col, TokenType::Error(format!("{:?}", e)));
-                        }
-                    }),
+                    Some('x') => {
+                        self.consume();
+                        contents.push(match self.hex_to_char() {
+                            Ok(c) => c,
+                            Err(UnexpectedHexEscape(e)) => {
+                                return self.create_token_col(
+                                    start_col,
+                                    TokenType::Error(format!("{:?}", e)),
+                                );
+                            }
+                        });
+                    }
                     _ => contents.push(c), //if not a hex escape add the backslash
                 },
                 _ => {
@@ -325,6 +332,7 @@ impl<'a> TokenScanner<'a> {
     fn lex_integer(&mut self, ch: char) -> Token {
         let first = self.index - ch.len_utf8();
         let start_col = self.column;
+        println!("Start col: {}", start_col);
         while let Some(c) = self.stream.peek() {
             if !c.is_ascii_digit() {
                 break;
@@ -349,6 +357,7 @@ impl<'a> TokenScanner<'a> {
 
     fn lex_key_or_identifier(&mut self, ch: char) -> Token {
         let first = self.index - ch.len_utf8();
+        let start_col = self.column;
         while let Some(c) = self.stream.peek() {
             if !(c.is_ascii_alphanumeric() || *c == '_' || *c == '\'') {
                 break;
@@ -369,7 +378,7 @@ impl<'a> TokenScanner<'a> {
             "else" => TokenType::Else,
             identifier => TokenType::Identifier(identifier.to_string()),
         };
-        Token::new(self.line, first + 1, ttype)
+        self.create_token_col(start_col, ttype)
     }
 
     pub(crate) fn next_token(&mut self) -> Option<Token> {
@@ -404,6 +413,7 @@ impl<'a> TokenScanner<'a> {
                 },
                 '\"' => self.lex_string(),
                 '\'' => self.lex_character(),
+                '\n' | '\t' | ' ' => return self.next_token(),
                 other => {
                     if other.is_ascii_digit() {
                         self.lex_integer(other)
@@ -445,7 +455,7 @@ mod tests {
             "Debug Info:{scanner:?}"
         );
         assert!(
-            scanner.consume() == None
+            scanner.consume() == Some('\n')
                 && scanner.line == 2
                 && scanner.column == 0
                 && scanner.index == 3,
@@ -459,7 +469,7 @@ mod tests {
             "Debug Info:{scanner:?}"
         );
         assert!(
-            scanner.consume() == None
+            scanner.consume() == Some('\n')
                 && scanner.line == 3
                 && scanner.column == 0
                 && scanner.index == 5,
@@ -473,7 +483,7 @@ mod tests {
             "Debug Info:{scanner:?}"
         );
         assert!(
-            scanner.consume() == None
+            scanner.consume() == Some('\r')
                 && scanner.line == 4
                 && scanner.column == 0
                 && scanner.index == 7,
@@ -487,7 +497,7 @@ mod tests {
             "Debug Info:{scanner:?}"
         );
         assert!(
-            scanner.consume() == None
+            scanner.consume() == Some('\t')
                 && scanner.line == 4
                 && scanner.column == 3
                 && scanner.index == 9,
@@ -501,12 +511,13 @@ mod tests {
             "Debug Info:{scanner:?}"
         );
         assert!(
-            scanner.consume() == None
+            scanner.consume() == Some(' ')
                 && scanner.line == 4
                 && scanner.column == 5
                 && scanner.index == 11,
             "Debug Info: {scanner:?}"
         );
+        assert!(scanner.consume() == None);
     }
 
     #[test]

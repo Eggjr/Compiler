@@ -1,5 +1,7 @@
 use lexer::LexerError;
 use std::env;
+use std::fs::{self, File};
+use std::io;
 use std::path::PathBuf;
 use std::process;
 
@@ -141,9 +143,26 @@ impl Config {
                 }
                 Ok(t) => t,
             };
-            for (mut token_stream, mut file) in tokens_files {
+            for (mut token_stream, path) in tokens_files {
+                let file_name = match &path.as_os_str().to_str() {
+                    Some(name) => name,
+                    None => "Could not get file name, it was invalid UTF-8",
+                };
+                let mut file = match safe_create_file(&path) {
+                    Ok(file) => file,
+                    Err(e) => {
+                        eprintln!(
+                            "Tried writer to file {} but failed with error {:?}",
+                            file_name, e
+                        );
+                        process::exit(1);
+                    }
+                };
                 if let Err(e) = lexer::write_tokens(&mut token_stream, &mut file) {
-                    eprintln!("Tried writing to file, but failed with error: {:?}", e);
+                    eprintln!(
+                        "Tried writing to file {}, but failed with error: {:?}",
+                        file_name, e
+                    );
                     process::exit(1);
                 }
             }
@@ -156,4 +175,12 @@ impl Config {
             panic!("Somehow you forgot about a config case. Config: {:?}", self)
         }
     }
+}
+
+/// Creates a file and all its parent directories if they do not already exist
+fn safe_create_file(path: &PathBuf) -> io::Result<File> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    File::create(path)
 }

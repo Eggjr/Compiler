@@ -2,8 +2,6 @@
 //!
 //! `Lexer` is a crate for lexing the eta programming language
 use std::collections::VecDeque;
-use std::fs::{self, File};
-use std::io;
 use std::path::PathBuf;
 
 mod lexer_error;
@@ -15,9 +13,7 @@ mod tokenizer;
 pub use lexer_error::LexerError;
 pub use token::Token;
 pub use token_type::TokenType;
-pub(crate) use tokenizer::Tokenizer;
-
-use crate::lexer_error::LexerError::PathCreationFailure;
+pub use tokenizer::Tokenizer;
 
 /// Checks if `source_files` only contains file names with *.eta* or *.eti* endings
 ///
@@ -36,31 +32,15 @@ fn verify_files(source_files: &[String]) -> Result<(), LexerError> {
     Ok(())
 }
 
-/// Creates a file and all its parent directories if they do not already exist
-fn safe_create_file(path: PathBuf) -> io::Result<File>{
-    if let Some(parent) = path.parent(){
-        fs::create_dir_all(parent)?;
-    }
-    File::create(path)
-}
-
 /// Constructs output `.lexed` files with the specified prefix `path` for each file name in `source_files`
 ///
 /// # Requires:
 ///
 /// All files in `source_files` end with `.eta` or `.eti`
-fn construct_paths(source_files: &[String], path: PathBuf) -> Result<Vec<PathBuf>, io::Error> {
-    match fs::create_dir_all(&path) {
-        Ok(_) => (),
-        Err(e) => return Err(e),
-    }
+fn construct_paths(source_files: &[String], path: PathBuf) -> Vec<PathBuf> {
     source_files
         .iter()
-        .map(|file_name| {
-            safe_create_file(
-                path.join(file_name)
-                .with_extension("lexed"))
-        })
+        .map(|file_name| path.join(file_name).with_extension("lexed"))
         .collect()
 }
 
@@ -69,10 +49,12 @@ fn construct_paths(source_files: &[String], path: PathBuf) -> Result<Vec<PathBuf
 /// # Examples
 ///
 /// ```
+///
 /// use lexer::Token;
 /// use lexer::TokenType;
 /// use std::collections::VecDeque;
 ///
+/// # fn main(){
 /// let mut buffer = vec![];
 /// let mut tokens : VecDeque<Token> = VecDeque::new();
 /// tokens.push_back(Token::new(1, 1, TokenType::Identifier("Pizza".to_string())));
@@ -80,8 +62,9 @@ fn construct_paths(source_files: &[String], path: PathBuf) -> Result<Vec<PathBuf
 /// tokens.push_back(Token::new(1, 7, TokenType::Int));
 /// tokens.push_back(Token::new(1, 10, TokenType::Assign));
 /// tokens.push_back(Token::new(1, 11, TokenType::Integer(10)));
-/// lexer::write_tokens(&mut tokens, &mut buffer);
+/// lexer::write_tokens(&mut tokens, &mut buffer).expect("Writing failed");
 /// assert_eq!(String::from_utf8(buffer).expect("This is valid utf-8"), "1:1 id Pizza\n1:6 :\n1:7 int\n1:10 =\n1:11 integer 10\n");
+/// # }
 /// ```
 ///
 /// # Errors
@@ -109,7 +92,7 @@ pub fn write_tokens<W: std::io::Write>(
 /// use lexer::TokenType;
 /// use lexer::Token;
 /// use std::env;
-///
+/// # fn main(){
 /// let mut tokens : VecDeque<Token> = VecDeque::new();
 /// tokens.push_back(Token::new(1, 1, TokenType::Identifier("Pizza".to_string())));
 /// tokens.push_back(Token::new(1, 6, TokenType::Colon));
@@ -117,9 +100,9 @@ pub fn write_tokens<W: std::io::Write>(
 /// tokens.push_back(Token::new(1, 10, TokenType::Assign));
 /// tokens.push_back(Token::new(1, 11, TokenType::Integer(10)));
 ///
-/// let current_dir = env::current_dir().expect("Improper access permission");
+/// let cur_dir = env::current_dir().expect("Current directory does not exists");
 ///
-/// let tokens_and_paths = match lexer::lex_files(vec![String::from("../eta_programs/lexer_files/lex_test_3.eta")], current_dir.clone()){
+/// let tokens_and_paths = match lexer::lex_files(vec![String::from("../eta_programs/lexer_files/lex_test_3.eta")], cur_dir.clone()){
 ///     Ok(v) => v,
 ///     Err(e) => {
 ///         dbg!(e);
@@ -127,8 +110,8 @@ pub fn write_tokens<W: std::io::Write>(
 ///     },
 /// };
 /// dbg!(&tokens_and_paths);
-/// assert_eq!(tokens_and_paths, vec![(tokens, current_dir)])
-/// panic!("Intended")
+/// assert_eq!(tokens_and_paths, vec![(tokens, cur_dir.join("../eta_programs/lexer_files/lex_test_3.lexed"))]);
+/// # }
 /// ```
 ///
 /// # Errors
@@ -146,13 +129,7 @@ pub fn lex_files(
         return Err(err_vec);
     };
     let mut token_queues: Vec<(VecDeque<Token>, PathBuf)> = vec![];
-    let output_files = match construct_paths(&source_files, path) {
-        Ok(files) => files,
-        Err(e) => {
-            err_vec.push(PathCreationFailure(e));
-            return Err(err_vec);
-        }
-    };
+    let output_files = construct_paths(&source_files, path);
     for (input_file, output_file) in source_files.into_iter().zip(output_files) {
         let tokenizer = Tokenizer::new();
         match tokenizer.lex_file(input_file) {
@@ -219,15 +196,14 @@ mod tests {
             create_path("lex_interface.eti"),
         ];
         dbg!(&source_files);
-        let paths =
-            construct_paths(&source_files, PathBuf::from("")).expect("Couldn't Create Path");
+        let paths = construct_paths(&source_files, PathBuf::from(""));
         for path in paths {
             assert!(path.extension() == Some(&OsStr::new("lexed")))
         }
     }
 
     #[test]
-    fn test_output_conversion_with_path() -> Result<(), Box<dyn std::error::Error>> {
+    fn test_output_conversion_with_path() {
         let source_files = vec![
             create_path("lex_test_1.eta"),
             create_path("lex_test_2.eta"),
@@ -247,11 +223,9 @@ mod tests {
         let paths = construct_paths(
             &source_files,
             PathBuf::from("/home/togal/Eta-Compiler/output"),
-        )
-        .expect("Couldn't Construct Paths");
+        );
         for (path, target) in paths.into_iter().zip(targets) {
             assert_eq!(path, target);
         }
-        Ok(())
     }
 }

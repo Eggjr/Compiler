@@ -48,6 +48,7 @@ pub enum TokenType {
 }
 
 impl fmt::Display for TokenType {
+    /// String representation of token_type to be printed to file as defined in spec
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let to_write = match self {
             TokenType::Identifier(id) => format!("id {}", id),
