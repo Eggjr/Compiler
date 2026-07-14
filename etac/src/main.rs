@@ -1,9 +1,14 @@
+//! etac is a crate that runs the compiler for the eta programming language
+//! requires the lexer, parser, type checker, IR generator, and assembly generator to function
+
 use lexer::LexerError;
 use std::env;
-use std::fs::{self, File};
-use std::io;
 use std::path::PathBuf;
 use std::process;
+
+mod file_utils;
+
+use crate::file_utils::CompilerError;
 
 fn main() {
     let config = Config::build(env::args().collect());
@@ -116,21 +121,23 @@ impl Config {
     ///
     /// `LexerError::InvalidFilesError(files)` if list of source_files contains invalid files
     /// `LexerError::IOReadError(file, error)` if it had trouble reading from `file`
-    /// `LexerError::IOWriteErrir(file, erro`
+    /// `LexerError::IOWriteError(file, error)` if it had trouble writing to `file`
     fn handle_config(self) {
         if self.source_files.is_empty() || self.help {
             print_help();
         } else if self.lex {
-            let tokens_files = match lexer::lex_files(self.source_files, self.path) {
+            let files =
+                match file_utils::verify_and_construct(&self.source_files, self.path, "lexed") {
+                    Ok(files) => files,
+                    Err(CompilerError::InvalidFilesError(invalids)) => {
+                        eprintln!("Invalid files given: {:?}", invalids);
+                        process::exit(1);
+                    }
+                };
+            let tokens = match lexer::lex_files(&self.source_files) {
                 Err(errors) => {
                     for e in errors {
                         match e {
-                            LexerError::InvalidFilesError(files) => {
-                                eprintln!("Invalid files given: {:?}", files);
-                                eprintln!(
-                                    "Please ensure files given have ending \".eti\" or \".eta\""
-                                );
-                            }
                             LexerError::IOReadError(file, error) => eprintln!(
                                 "Tried reading file: {}, but failed with error: {}",
                                 file, error
@@ -143,12 +150,12 @@ impl Config {
                 }
                 Ok(t) => t,
             };
-            for (mut token_stream, path) in tokens_files {
+            for (mut token_stream, path) in tokens.into_iter().zip(files) {
                 let file_name = match &path.as_os_str().to_str() {
                     Some(name) => name,
-                    None => "Could not get file name, it was invalid UTF-8",
+                    None => "<Could not get file name, it was invalid UTF-8>",
                 };
-                let mut file = match safe_create_file(&path) {
+                let mut file = match file_utils::safe_create_file(&path) {
                     Ok(file) => file,
                     Err(e) => {
                         eprintln!(
@@ -169,18 +176,11 @@ impl Config {
         } else if self.parse {
             unimplemented!("I haven't implemented this yet.");
         } else if self.type_check {
+            unimplemented!("Type Checking not yet implemented")
         } else if self.code_gen {
             unimplemented!("I haven't implemented this yet either.");
         } else {
             panic!("Somehow you forgot about a config case. Config: {:?}", self)
         }
     }
-}
-
-/// Creates a file and all its parent directories if they do not already exist
-fn safe_create_file(path: &PathBuf) -> io::Result<File> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)?;
-    }
-    File::create(path)
 }

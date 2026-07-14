@@ -26,14 +26,19 @@ impl<'a> TokenScanner<'a> {
         }
     }
 
+    /// Creates token with TokenType `ttype` at current line and column
     fn create_token(&self, ttype: TokenType) -> Token {
         Token::new(self.line, self.column, ttype)
     }
 
+    /// Creates token with TokenType `ttype` at current line and specified column `col`
     fn create_token_col(&self, col: usize, ttype: TokenType) -> Token {
         Token::new(self.line, col, ttype)
     }
 
+    /// Consumes the next character from the `self.stream` and returns `Some(char)` if it was not empty and otherwise returns `None`
+    /// Also handles incrementing the `self.line`, `self.column`, and `self.index`
+    /// Convert any CRLF to just LF
     fn consume(&mut self) -> Option<char> {
         if let Some(c) = self.stream.next() {
             self.index += c.len_utf8();
@@ -73,6 +78,7 @@ impl<'a> TokenScanner<'a> {
         None
     }
 
+    /// Remove all whitespace from the front of `self.stream`
     fn remove_whitespace(&mut self) {
         while let Some(c) = self.stream.peek() {
             match c {
@@ -84,6 +90,7 @@ impl<'a> TokenScanner<'a> {
         }
     }
 
+    /// Consumes the text on the line following a comment symbol: `//`
     fn consume_comment(&mut self) {
         while let Some(c) = self.consume() {
             if c == '\n' {
@@ -92,6 +99,8 @@ impl<'a> TokenScanner<'a> {
         }
     }
 
+    /// Lexes a forward slash `/` to determine if it is division of a comment
+    /// returns Some(Token representation of division) (`/`), or returns None if comment (`//`)
     fn lex_slash(&mut self) -> Option<Token> {
         match self.stream.peek() {
             Some('/') => {
@@ -102,6 +111,8 @@ impl<'a> TokenScanner<'a> {
         }
     }
 
+    /// lexes `*` to determine if it is Times or High Multiplication
+    /// returns Token representation of Times (`*`) or High Multiplication (`*>>`) or an error token if neither was matched
     fn lex_star(&mut self) -> Token {
         let start_col = self.column;
         if let Some('>') = self.stream.peek() {
@@ -133,6 +144,9 @@ impl<'a> TokenScanner<'a> {
         self.create_token(TokenType::Times)
     }
 
+    /// Converts a hexadecimal escape enclosed in curly braces to its utf-8 char representation
+    /// returns Ok(char) if it could convert the sequence or ERr(UnexpectedHexEscape) if the operation failed
+    /// May fail if hex code is invalid utf-8, or curly braces are missing
     fn hex_to_char(&mut self) -> Result<char, UnexpectedHexEscape> {
         let mut res: String = String::from("");
         let start_col = self.column;
@@ -179,6 +193,8 @@ impl<'a> TokenScanner<'a> {
         )))
     }
 
+    /// Lexes a character literal enclosed in single quotes (`''`)
+    /// returns a token representation of that character literal or an error token if the character was invalid
     fn lex_character(&mut self) -> Token {
         let start_col = self.column;
         let val = match self.consume() {
@@ -244,6 +260,8 @@ impl<'a> TokenScanner<'a> {
         )))
     }
 
+    /// lexesting a string literal enclosed in double quotes (`""`)
+    /// returns a token representation of the string literal or an error Token if there was a failure parsing the string
     fn lex_string(&mut self) -> Token {
         let mut contents = String::new();
         let start_col = self.column;
@@ -281,6 +299,8 @@ impl<'a> TokenScanner<'a> {
         )
     }
 
+    /// lexes the left angle bracket (`<`)
+    /// returns a token representation of Less Than (`<`) or Less Than Or Equal (`<=`)
     fn lex_langle(&mut self) -> Token {
         let token: Token;
         match self.stream.peek() {
@@ -293,6 +313,8 @@ impl<'a> TokenScanner<'a> {
         token
     }
 
+    /// lexes the right angle bracket (>)
+    /// returns a token representation of Greater Than (>) or Greater Than Or Equal (>=)
     fn lex_rangle(&mut self) -> Token {
         let token: Token;
         match self.stream.peek() {
@@ -305,6 +327,8 @@ impl<'a> TokenScanner<'a> {
         token
     }
 
+    /// lexes the exclamation point (`!`)
+    /// returns a Token representation of either unary boolean not operator (`!`) or the notequal operator (`!=`)
     fn lex_exclamation(&mut self) -> Token {
         let token: Token;
         match self.stream.peek() {
@@ -317,6 +341,8 @@ impl<'a> TokenScanner<'a> {
         token
     }
 
+    /// lexes the equal sign (=)
+    /// returns a token representation of the assignment operator (=) or the boolean equality operator (==)
     fn lex_equal(&mut self) -> Token {
         let token: Token;
         match self.stream.peek() {
@@ -329,6 +355,9 @@ impl<'a> TokenScanner<'a> {
         token
     }
 
+    /// lexes an integer (sequence of number)
+    /// returns an unsigned token representation of the lexed integer as `u64` that may or may not be valid `i32`
+    /// may return an error token if it couldn't parse the int to a `u64` successfully
     fn lex_integer(&mut self, ch: char) -> Token {
         let first = self.index - ch.len_utf8();
         let start_col = self.column;
@@ -340,7 +369,6 @@ impl<'a> TokenScanner<'a> {
                 self.consume();
             }
         }
-        //Handle i64 bounds in the parser
         self.create_token_col(
             start_col,
             TokenType::Integer(match self.input_text[first..self.index].parse::<u64>() {
@@ -355,6 +383,9 @@ impl<'a> TokenScanner<'a> {
         )
     }
 
+    /// Lexes a keyword or identifier with maximal munch
+    /// returns a token representation of a keyword (`int`, `bool`, `while`, `use`, `return`, `length`, `true`, `false`, `if`, `else`)
+    /// or an identifer (variable name, function name)
     fn lex_key_or_identifier(&mut self, ch: char) -> Token {
         let first = self.index - ch.len_utf8();
         let start_col = self.column;
@@ -381,6 +412,9 @@ impl<'a> TokenScanner<'a> {
         self.create_token_col(start_col, ttype)
     }
 
+    /// Produces the next token from the input text
+    /// returns 'Some(token)' if there is one or 'None' if no tokens are left
+    /// Token produced may be an error token
     pub(crate) fn next_token(&mut self) -> Option<Token> {
         self.remove_whitespace();
         if let Some(c) = self.consume() {
@@ -523,5 +557,6 @@ mod tests {
     #[test]
     fn test_consume() {
         let mut _scanner: TokenScanner<'_> = TokenScanner::new(&INPUT_TEXT);
+        //let INPUT_TEXT =  "i : int = 0\r\nz:int=1+2+3\ns: int[] = \"Hello\"\nb:bool, i:int = f(x)";
     }
 }
