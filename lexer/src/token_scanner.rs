@@ -586,12 +586,33 @@ mod tests {
     fn test_lex_slash() {
         let mut scanner = TokenScanner::new("1/2//COMMENT");
         assert_eq!(scanner.consume(), Some('1'));
+        scanner.consume();
         assert_eq!(
-            scanner.next_token().unwrap(),
+            scanner.lex_slash().unwrap(),
             Token::new(1, 2, TokenType::Divide)
         );
         assert_eq!(scanner.consume(), Some('2'));
-        assert_eq!(scanner.next_token(), None);
+        scanner.consume();
+        assert_eq!(scanner.lex_slash(), None);
+        assert_eq!(scanner.consume(), None);
+    }
+
+    #[test]
+    fn test_lex_star(){
+        let mut scanner = TokenScanner::new("1*2\n2147483668*>>2147483668");
+        scanner.consume();
+        scanner.consume();
+        assert_eq!(scanner.lex_star(), Token::new(1, 2, TokenType::Times));
+        scanner.consume();
+        scanner.consume();
+        for _ in 0..10{
+            scanner.consume();
+        }
+        scanner.consume();
+        assert_eq!(scanner.lex_star(), Token::new(2, 11, TokenType::HighMultiplication));
+        for _ in 0..10{
+            scanner.consume();
+        }
         assert_eq!(scanner.consume(), None);
     }
 
