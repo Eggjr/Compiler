@@ -361,7 +361,6 @@ impl<'a> TokenScanner<'a> {
     fn lex_integer(&mut self, ch: char) -> Token {
         let first = self.index - ch.len_utf8();
         let start_col = self.column;
-        println!("Start col: {}", start_col);
         while let Some(c) = self.stream.peek() {
             if !c.is_ascii_digit() {
                 break;
@@ -470,6 +469,8 @@ impl<'a> TokenScanner<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use pretty_assertions::assert_eq;
+
     const WHITESPACE: &str = "1\r\n2\n3\r4\t5 ";
     const INPUT_TEXT: &str =
         "i : int = 0\r\nz:int=1+2+3\ns: int[] = \"Hello\"\nb:bool, i:int = f(x)";
@@ -555,8 +556,93 @@ mod tests {
     }
 
     #[test]
-    fn test_consume() {
-        let mut _scanner: TokenScanner<'_> = TokenScanner::new(&INPUT_TEXT);
-        //let INPUT_TEXT =  "i : int = 0\r\nz:int=1+2+3\ns: int[] = \"Hello\"\nb:bool, i:int = f(x)";
+    fn test_remove_whitespace() {
+        let mut scanner: TokenScanner<'_> = TokenScanner::new("\t     \nWhiteSpace\r\n    ");
+        let chars = vec!['W', 'h', 'i', 't', 'e', 'S', 'p', 'a', 'c', 'e'];
+        for i in 0..10 {
+            scanner.remove_whitespace();
+            assert_eq!(chars[i], scanner.consume().expect("None found"))
+        }
+        scanner.remove_whitespace();
+        assert_eq!(None, scanner.consume());
+    }
+
+    #[test]
+    fn test_consume_comment() {
+        let mut scanner: TokenScanner<'_> = TokenScanner::new(
+            "//This Comment Will Be Consumed\nnot_this//Same line Comment\n//Also not read",
+        );
+        let chars = vec!['n', 'o', 't', '_', 't', 'h', 'i', 's'];
+        scanner.consume_comment();
+        for i in 0..8 {
+            assert_eq!(chars[i], scanner.consume().expect("None found"))
+        }
+        scanner.consume_comment();
+        scanner.consume_comment();
+        assert!(scanner.consume().is_none())
+    }
+
+    #[test]
+    fn test_lex_slash() {
+        let mut scanner = TokenScanner::new("1/2//COMMENT");
+        assert_eq!(scanner.consume(), Some('1'));
+        assert_eq!(
+            scanner.next_token().unwrap(),
+            Token::new(1, 2, TokenType::Divide)
+        );
+        assert_eq!(scanner.consume(), Some('2'));
+        assert_eq!(scanner.next_token(), None);
+        assert_eq!(scanner.consume(), None);
+    }
+
+    #[test]
+    fn test_next_token() {
+        let mut scanner: TokenScanner<'_> = TokenScanner::new(&INPUT_TEXT);
+        let str_output = "1:1 id i\n\
+            1:3 :\n\
+            1:5 int\n\
+            1:9 =\n\
+            1:11 integer 0\n\
+            2:1 id z\n\
+            2:2 :\n\
+            2:3 int\n\
+            2:6 =\n\
+            2:7 integer 1\n\
+            2:8 +\n\
+            2:9 integer 2\n\
+            2:10 +\n\
+            2:11 integer 3\n\
+            3:1 id s\n\
+            3:2 :\n\
+            3:4 int\n\
+            3:7 [\n\
+            3:8 ]\n\
+            3:10 =\n\
+            3:12 string Hello\n\
+            4:1 id b\n\
+            4:2 :\n\
+            4:3 bool\n\
+            4:7 ,\n\
+            4:9 id i\n\
+            4:10 :\n\
+            4:11 int\n\
+            4:15 =\n\
+            4:17 id f\n\
+            4:18 (\n\
+            4:19 id x\n\
+            4:20 )\
+        ";
+        let mut tokens = vec![];
+        while let Some(t) = scanner.next_token() {
+            tokens.push(t);
+        }
+        assert_eq!(
+            tokens
+                .into_iter()
+                .map(|t| t.to_string())
+                .collect::<Vec<String>>()
+                .join("\n"),
+            str_output
+        )
     }
 }

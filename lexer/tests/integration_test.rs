@@ -1,4 +1,5 @@
 use lexer::*;
+use pretty_assertions::assert_eq;
 use std::collections::VecDeque;
 
 #[test]

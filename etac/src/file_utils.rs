@@ -54,10 +54,8 @@ pub fn verify_and_construct(
     path: PathBuf,
     ending: &str,
 ) -> Result<Vec<PathBuf>, CompilerError> {
-    if let Err(e) = verify_files(&source_files) {
-        return Err(e);
-    };
-    Ok(construct_paths(&source_files, path, ending))
+    verify_files(source_files)?;
+    Ok(construct_paths(source_files, path, ending))
 }
 
 #[cfg(test)]

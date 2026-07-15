@@ -57,7 +57,7 @@ pub fn write_tokens<W: std::io::Write>(
 /// use std::collections::VecDeque;
 /// use lexer::TokenType;
 /// use lexer::Token;
-/// 
+///
 /// let mut tokens : VecDeque<Token> = VecDeque::new();
 /// tokens.push_back(Token::new(1, 1, TokenType::Identifier("Pizza".to_string())));
 /// tokens.push_back(Token::new(1, 6, TokenType::Colon));

@@ -1,5 +1,6 @@
 use crate::token_type::TokenType;
 use std::fmt;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     line: usize,
