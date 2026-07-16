@@ -3,7 +3,7 @@ use crate::token_type::TokenType;
 use std::iter::Peekable;
 use std::str::Chars;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 struct UnexpectedHexEscape(String);
 
 #[derive(Debug, Clone)]
@@ -148,35 +148,38 @@ impl<'a> TokenScanner<'a> {
     /// returns Ok(char) if it could convert the sequence or ERr(UnexpectedHexEscape) if the operation failed
     /// May fail if hex code is invalid utf-8, or curly braces are missing
     fn hex_to_char(&mut self) -> Result<char, UnexpectedHexEscape> {
-        let mut res: String = String::from("");
         let start_col = self.column;
+        let start_index = self.index + 1; //size of { is 1
         match self.consume() {
             Some('{') => (),
             _ => {
                 return Err(UnexpectedHexEscape(format!(
-                    "Expected {{ to begin Unicode Character hex value hex at {}:{}",
+                    "Expected {{ to begin Unicode Character hex value at {}:{}",
                     self.line, start_col
                 )));
             }
         };
         let mut digits = 0;
         while let Some(c) = self.consume()
-            && digits < 6
+            && digits < 7
         {
             if c.is_ascii_hexdigit() {
-                res.push(c);
                 digits += 1;
             } else if c == '}' {
-                let u32_rep = match u32::from_str_radix(res.as_str(), 16) {
-                    Ok(u) => u,
-                    Err(e) => return Err(UnexpectedHexEscape(format!("{}", e))),
-                };
+                if digits == 0 {
+                    return Err(UnexpectedHexEscape(format!("Empty Hex Escape Given at {}:{}", self.line, start_col)));
+                }
+                let u32_rep =
+                    match u32::from_str_radix(&self.input_text[start_index..self.index - 1], 16) {
+                        Ok(u) => u,
+                        Err(e) => return Err(UnexpectedHexEscape(format!("{}", e))),
+                    };
                 match char::from_u32(u32_rep) {
                     Some(c) => return Ok(c),
                     None => {
                         return Err(UnexpectedHexEscape(format!(
                             "Hexadecimal number {} could not be parsed to valid unicode",
-                            res
+                            &self.input_text[start_index..self.index - 1]
                         )));
                     }
                 }
@@ -598,22 +601,90 @@ mod tests {
     }
 
     #[test]
-    fn test_lex_star(){
+    fn test_lex_star() {
         let mut scanner = TokenScanner::new("1*2\n2147483668*>>2147483668");
         scanner.consume();
         scanner.consume();
         assert_eq!(scanner.lex_star(), Token::new(1, 2, TokenType::Times));
         scanner.consume();
         scanner.consume();
-        for _ in 0..10{
+        for _ in 0..10 {
             scanner.consume();
         }
         scanner.consume();
-        assert_eq!(scanner.lex_star(), Token::new(2, 11, TokenType::HighMultiplication));
-        for _ in 0..10{
+        assert_eq!(
+            scanner.lex_star(),
+            Token::new(2, 11, TokenType::HighMultiplication)
+        );
+        for _ in 0..10 {
             scanner.consume();
         }
         assert_eq!(scanner.consume(), None);
+    }
+
+    #[test]
+    fn test_hex_char() {
+        let mut scanner = TokenScanner::new("{10FFFF}");
+        let mut err_scanner = TokenScanner::new("ABCDEF}");
+        let mut err_scanner2 = TokenScanner::new("{AAA AAA}");
+        let mut err_scanner3 = TokenScanner::new("{11FFFF}");
+        let mut err_scanner4 = TokenScanner::new("{124456");
+        let mut err_scanner5 = TokenScanner::new("{}");
+        let mut err_scanner6 = TokenScanner::new("{1111111}");
+        let non_hex_chars = vec![
+            '`', '~', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '-', '_', '+', '=', '[',
+            '{', ']', '\\', '|', '\'', '\"', ':', ';', '<', ',', '>', '.', '/', '?', 'g', 'h',
+            'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y',
+            'z',
+        ];
+        assert_eq!(
+            err_scanner.hex_to_char(),
+            Err(UnexpectedHexEscape(format!(
+                "Expected {{ to begin Unicode Character hex value at {}:{}",
+                1, 0
+            )))
+        );
+        assert!(err_scanner2.hex_to_char().is_err());
+        assert_eq!(
+            err_scanner3.hex_to_char(),
+            Err(UnexpectedHexEscape(format!(
+                "Hexadecimal number {} could not be parsed to valid unicode",
+                "11FFFF"
+            )))
+        );
+        for c in non_hex_chars {
+            let text = format!("{{{}}}", &c);
+            let mut sc = TokenScanner::new(text.as_str());
+            assert_eq!(
+                sc.hex_to_char(),
+                Err(UnexpectedHexEscape(format!(
+                    "Expected valid hexadecimal character but got {}",
+                    c
+                )))
+            )
+        }
+        assert_eq!(
+            err_scanner4.hex_to_char(),
+            Err(UnexpectedHexEscape(format!(
+                "Expected }} to end Unicode Character value hex at {}:{}",
+                1, 0
+            )))
+        );
+        assert_eq!(
+            err_scanner5.hex_to_char(),
+            Err(UnexpectedHexEscape(format!(
+                "Empty Hex Escape Given at {}:{}",
+                1, 0
+            )))
+        );
+        assert_eq!(
+            err_scanner6.hex_to_char(),
+            Err(UnexpectedHexEscape(format!(
+                "Expected }} to end Unicode Character value hex at {}:{}",
+                1, 0
+            )))
+        );
+        assert_eq!(scanner.hex_to_char(), Ok('\u{10FFFF}'));
     }
 
     #[test]
