@@ -167,13 +167,14 @@ impl<'a> TokenScanner<'a> {
                 digits += 1;
             } else if c == '}' {
                 if digits == 0 {
-                    return Err(UnexpectedHexEscape(format!("Empty Hex Escape Given at {}:{}", self.line, start_col)));
+                    return Err(UnexpectedHexEscape(format!(
+                        "Empty Hex Escape Given at {}:{}",
+                        self.line, start_col
+                    )));
                 }
                 let u32_rep =
-                    match u32::from_str_radix(&self.input_text[start_index..self.index - 1], 16) {
-                        Ok(u) => u,
-                        Err(e) => return Err(UnexpectedHexEscape(format!("{}", e))),
-                    };
+                    u32::from_str_radix(&self.input_text[start_index..self.index - 1], 16)
+                        .expect("Somehow Passed a Hexadecimal that Exceeded u32 limit");
                 match char::from_u32(u32_rep) {
                     Some(c) => return Ok(c),
                     None => {
@@ -205,7 +206,7 @@ impl<'a> TokenScanner<'a> {
                 Some('x') => match self.hex_to_char() {
                     Ok(c) => c,
                     Err(UnexpectedHexEscape(e)) => {
-                        return self.create_token(TokenType::Error(format!("{:?}", e)));
+                        return self.create_token_col(start_col, TokenType::Error(e.to_string()));
                     }
                 },
                 Some('n') => '\n',
@@ -603,6 +604,8 @@ mod tests {
     #[test]
     fn test_lex_star() {
         let mut scanner = TokenScanner::new("1*2\n2147483668*>>2147483668");
+        let mut err_scanner = TokenScanner::new("*>a");
+        let mut err_scanner2 = TokenScanner::new("*>");
         scanner.consume();
         scanner.consume();
         assert_eq!(scanner.lex_star(), Token::new(1, 2, TokenType::Times));
@@ -620,6 +623,29 @@ mod tests {
             scanner.consume();
         }
         assert_eq!(scanner.consume(), None);
+        err_scanner.consume();
+        assert_eq!(
+            err_scanner.lex_star(),
+            Token::new(
+                1,
+                1,
+                TokenType::Error(format!(
+                    "Expected > to finish High Multiplication token but received {}",
+                    'a'
+                ))
+            )
+        );
+        err_scanner2.consume();
+        assert_eq!(
+            err_scanner2.lex_star(),
+            Token::new(
+                1,
+                1,
+                TokenType::Error(
+                    "Expected > to finish High Mulitplication Token but found nothing".to_string(),
+                )
+            ),
+        )
     }
 
     #[test]
@@ -633,9 +659,8 @@ mod tests {
         let mut err_scanner6 = TokenScanner::new("{1111111}");
         let non_hex_chars = vec![
             '`', '~', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '-', '_', '+', '=', '[',
-            '{', ']', '\\', '|', '\'', '\"', ':', ';', '<', ',', '>', '.', '/', '?', 'g', 'h',
-            'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y',
-            'z',
+            '{', ']', '\\', '|', '\'', '\"', ':', ';', '<', ',', '>', '.', '/', '?', 'g', 'h', 'i',
+            'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z',
         ];
         assert_eq!(
             err_scanner.hex_to_char(),
@@ -685,6 +710,120 @@ mod tests {
             )))
         );
         assert_eq!(scanner.hex_to_char(), Ok('\u{10FFFF}'));
+    }
+
+    #[test]
+    fn test_lex_char() {
+        let mut scanner = TokenScanner::new(
+            "\'\\n\'\
+            \'\\t\'\
+            \'\\r\'\
+            \'\\\'\'\
+            \'\\\"\'\
+            \'\\\\\'\
+            \'\\x{64}\'",
+        );
+        scanner.consume();
+        assert_eq!(
+            scanner.lex_character(),
+            Token::new(1, 1, TokenType::Character('\n'))
+        );
+        scanner.consume();
+        assert_eq!(
+            scanner.lex_character(),
+            Token::new(1, 5, TokenType::Character('\t'))
+        );
+        scanner.consume();
+        assert_eq!(
+            scanner.lex_character(),
+            Token::new(1, 9, TokenType::Character('\r'))
+        );
+        scanner.consume();
+        assert_eq!(
+            scanner.lex_character(),
+            Token::new(1, 13, TokenType::Character('\''))
+        );
+        scanner.consume();
+        assert_eq!(
+            scanner.lex_character(),
+            Token::new(1, 17, TokenType::Character('\"'))
+        );
+        scanner.consume();
+        assert_eq!(
+            scanner.lex_character(),
+            Token::new(1, 21, TokenType::Character('\\'))
+        );
+        scanner.consume();
+        assert_eq!(
+            scanner.lex_character(),
+            Token::new(1, 25, TokenType::Character('d'))
+        );
+        assert!(scanner.consume().is_none());
+        let mut err_scanner = TokenScanner::new("\'\'");
+        err_scanner.consume();
+        assert_eq!(
+            err_scanner.lex_character(),
+            Token::new(1, 1, TokenType::Error("No Character Given".to_string()))
+        );
+        let mut err_scanner2 = TokenScanner::new("\'\\b\'");
+        err_scanner2.consume();
+        assert_eq!(
+            err_scanner2.lex_character(),
+            Token::new(
+                1,
+                1,
+                TokenType::Error("Unexpected Escape Sequence found: \\b".to_string())
+            )
+        );
+        let mut err_scanner3 = TokenScanner::new("\'\\x{FFFFFF}\'");
+        err_scanner3.consume();
+        assert_eq!(
+            err_scanner3.lex_character(),
+            Token::new(
+                1,
+                1,
+                TokenType::Error(
+                    "Hexadecimal number FFFFFF could not be parsed to valid unicode".to_string()
+                )
+            )
+        );
+        let mut err_scanner4 = TokenScanner::new("\'\\");
+        err_scanner4.consume();
+        assert_eq!(
+            err_scanner4.lex_character(),
+            Token::new(
+                1,
+                1,
+                TokenType::Error(String::from(
+                    "Unfinished Escape Seqeunce. Expected literal to terminate with <escape>\' but got nothing",
+                ))
+            )
+        );
+        let mut err_scanner5 = TokenScanner::new("\'aa\'");
+        err_scanner5.consume();
+        assert_eq!(
+            err_scanner5.lex_character(),
+            Token::new(
+                1,
+                1,
+                TokenType::Error(format!(
+                    "Expected character literal to be closed with \' but got {}",
+                    'a'
+                ))
+            )
+        );
+        let mut err_scanner6 = TokenScanner::new("\'a");
+        err_scanner6.consume();
+        assert_eq!(err_scanner6.lex_character(), Token::new(1, 1, TokenType::Error("Unfinished Escape Seqeunce. Expected literal to terminate with <escape>\' but got nothing".to_string())));
+        let mut err_scanner7 = TokenScanner::new("\'");
+        err_scanner7.consume();
+        assert_eq!(err_scanner7.lex_character(), Token::new(1, 1, TokenType::Error("Expected character literal to be closed with \' but got nothing".to_string())));
+        let mut scanner2 = TokenScanner::new("\'z\'");
+        scanner2.consume();
+        assert_eq!(
+            scanner2.lex_character(),
+            Token::new(1, 1, TokenType::Character('z'))
+        );
     }
 
     #[test]
