@@ -293,7 +293,7 @@ impl<'a> TokenScanner<'a> {
         let token: Token;
         match self.stream.peek() {
             Some('=') => {
-                token = self.create_token_col(self.column - 1, TokenType::LE);
+                token = self.create_token_col(self.column, TokenType::LE);
                 self.consume();
             }
             _ => token = self.create_token(TokenType::LAngle),
@@ -307,7 +307,7 @@ impl<'a> TokenScanner<'a> {
         let token: Token;
         match self.stream.peek() {
             Some('=') => {
-                token = self.create_token_col(self.column - 1, TokenType::GE);
+                token = self.create_token_col(self.column, TokenType::GE);
                 self.consume();
             }
             _ => token = self.create_token(TokenType::RAngle),
@@ -321,7 +321,7 @@ impl<'a> TokenScanner<'a> {
         let token: Token;
         match self.stream.peek() {
             Some('=') => {
-                token = self.create_token_col(self.column - 1, TokenType::NE);
+                token = self.create_token_col(self.column, TokenType::NE);
                 self.consume();
             }
             _ => token = self.create_token(TokenType::Exclamation),
@@ -335,7 +335,7 @@ impl<'a> TokenScanner<'a> {
         let token: Token;
         match self.stream.peek() {
             Some('=') => {
-                token = self.create_token_col(self.column - 1, TokenType::EQ);
+                token = self.create_token_col(self.column, TokenType::EQ);
                 self.consume();
             }
             _ => token = self.create_token(TokenType::Assign),
@@ -527,7 +527,6 @@ mod tests {
     #[test]
     fn test_lex_slash() {
         let mut scanner = TokenScanner::new("1/2//COMMENT");
-        let cases = vec![Some('1')];
         scanner.consume();
         scanner.consume();
         assert_eq!(
@@ -541,7 +540,7 @@ mod tests {
 
     #[test]
     fn test_lex_star() {
-        let mut cases = vec![
+        let cases = vec![
             ("1*2", 2, Token::new(1, 2, TokenType::Times)),
             (
                 "2147483668*>>2147483668",
@@ -575,7 +574,7 @@ mod tests {
         ];
         for (input, consume, output) in cases {
             let mut scanner = TokenScanner::new(input);
-            for i in 0..consume {
+            for _ in 0..consume {
                 scanner.consume();
             }
             assert_eq!(scanner.lex_star(), output)
@@ -723,7 +722,7 @@ mod tests {
         ];
         for (input, consume, output) in cases {
             let mut scanner = TokenScanner::new(input);
-            for i in 0..consume {
+            for _ in 0..consume {
                 scanner.consume();
             }
             assert_eq!(scanner.lex_character(), output);
@@ -733,17 +732,107 @@ mod tests {
     #[test]
     fn test_lex_string() {
         let cases = vec![
-            ("\"Hello Worl\\x{64}!\"", 1, Token::new(1, 1, TokenType::String("Hello World!".to_string()))),
-            ("\"Hello", 1, Token::new(1, 1, TokenType::Error(format!("Expected \" to close String at 1:1",)))),
-            ("\"", 1, Token::new(1, 1, TokenType::Error(format!("Expected \" to close String at 1:1")))),
-            ("\"\\d\"", 1, Token::new(1, 1, TokenType::Error("Unexpected Escape Sequence found: \\d".to_string()))),
+            (
+                "\"Hello Worl\\x{64}!\"",
+                1,
+                Token::new(1, 1, TokenType::String("Hello World!".to_string())),
+            ),
+            (
+                "\"Hello",
+                1,
+                Token::new(
+                    1,
+                    1,
+                    TokenType::Error(format!("Expected \" to close String at 1:1",)),
+                ),
+            ),
+            (
+                "\"",
+                1,
+                Token::new(
+                    1,
+                    1,
+                    TokenType::Error(format!("Expected \" to close String at 1:1")),
+                ),
+            ),
+            (
+                "\"\\d\"",
+                1,
+                Token::new(
+                    1,
+                    1,
+                    TokenType::Error("Unexpected Escape Sequence found: \\d".to_string()),
+                ),
+            ),
         ];
-        for (input, consume, output) in cases{
+        for (input, consume, output) in cases {
             let mut scanner = TokenScanner::new(input);
-            for i in 0..consume{
+            for _ in 0..consume {
                 scanner.consume();
             }
             assert_eq!(scanner.lex_string(), output);
+        }
+    }
+
+    #[test]
+    fn test_lex_langle() {
+        let cases = vec![
+            ("<=", Token::new(1, 1, TokenType::LE)),
+            ("<=100", Token::new(1, 1, TokenType::LE)),
+            ("<1", Token::new(1, 1, TokenType::LAngle)),
+            ("<", Token::new(1, 1, TokenType::LAngle)),
+        ];
+        for (input, output) in cases {
+            let mut scanner = TokenScanner::new(input);
+            scanner.consume();
+            assert_eq!(scanner.lex_langle(), output);
+        }
+    }
+
+    #[test]
+    fn test_lex_rangle() {
+        let cases = vec![
+            (">=", Token::new(1, 1, TokenType::GE)),
+            (">=100", Token::new(1, 1, TokenType::GE)),
+            (">1", Token::new(1, 1, TokenType::RAngle)),
+            (">", Token::new(1, 1, TokenType::RAngle)),
+        ];
+        for (input, output) in cases {
+            let mut scanner = TokenScanner::new(input);
+            scanner.consume();
+            assert_eq!(scanner.lex_rangle(), output);
+        }
+    }
+
+    #[test]
+    fn test_lex_exclamation() {
+        let cases = vec![
+            ("!=true", Token::new(1, 1, TokenType::NE)),
+            ("!=", Token::new(1, 1, TokenType::NE)),
+            ("!", Token::new(1, 1, TokenType::Exclamation)),
+            ("!false", Token::new(1, 1, TokenType::Exclamation)),
+        ];
+        for (input, output) in cases {
+            let mut scanner = TokenScanner::new(input);
+            scanner.consume();
+            assert_eq!(scanner.lex_exclamation(), output);
+        }
+    }
+
+    #[test]
+    fn test_lex_equal() {
+        let cases = vec![
+            ("false==true", 6, Token::new(1, 6, TokenType::EQ)),
+            ("head==", 5, Token::new(1, 5, TokenType::EQ)),
+            ("x =", 3, Token::new(1, 3, TokenType::Assign)),
+            ("x : int = 5", 9, Token::new(1, 9, TokenType::Assign)),
+        ];
+        for (input, count, output) in cases {
+            let mut scanner = TokenScanner::new(input);
+            for _ in 0..count {
+                scanner.consume();
+            }
+            assert_eq!(scanner.lex_equal(), output);
         }
     }
 
