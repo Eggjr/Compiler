@@ -1,6 +1,6 @@
 //! # Lexer
 //!
-//! `Lexer` is a crate for lexing the eta programming language
+//! `Lexer` is a crate for lexing the chuda programming language
 use std::collections::VecDeque;
 
 mod lexer_error;
@@ -66,7 +66,7 @@ pub fn write_tokens<W: std::io::Write>(
 /// tokens.push_back(Token::new(1, 11, TokenType::Integer(10)));
 /// let vec_tokens = vec![tokens];
 ///
-/// let tokens = match lexer::lex_files(&vec!["../eta_programs/lexer_files/lex_test_3.eta".to_string()]){
+/// let tokens = match lexer::lex_files(&vec!["../chuda_programs/lexer_files/lex_test_3.chuda".to_string()]){
 ///     Ok(v) => v,
 ///     Err(e) => {
 ///         panic!("Lexing Failed")
@@ -78,7 +78,7 @@ pub fn write_tokens<W: std::io::Write>(
 /// # Errors
 ///
 /// returns `Vec<LexerError>` upon failure to verify files, or upon termination if any files had
-/// an error token written to them, detailing where the errors can be viewed and giving a brief
+/// an error token written to them, dchudailing where the errors can be viewed and giving a brief
 /// description of the errors
 pub fn lex_files(source_files: &[String]) -> Result<Vec<VecDeque<Token>>, Vec<LexerError>> {
     let mut err_vec = vec![];

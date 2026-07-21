@@ -6,7 +6,7 @@ use std::collections::VecDeque;
 fn test_lexing_failure() {
     let tokenizer = Tokenizer::new();
     let tokens = tokenizer
-        .lex_file("../eta_programs/lexer_files/lex_test_2.eta")
+        .lex_file("../chuda_programs/lexer_files/lex_test_2.chuda")
         .expect("Lexing Failure");
     let mut targets = VecDeque::new();
 
@@ -30,7 +30,7 @@ fn test_lexing_failure() {
 fn test_lexing_simple() {
     let tokenizer = Tokenizer::new();
     let tokens = tokenizer
-        .lex_file("../eta_programs/lexer_files/lex_test_3.eta")
+        .lex_file("../chuda_programs/lexer_files/lex_test_3.chuda")
         .expect("Lexing Failure");
     let mut targets: VecDeque<Token> = VecDeque::new();
     targets.push_back(Token::new(1, 1, TokenType::Identifier("Pizza".to_string())));
@@ -39,4 +39,10 @@ fn test_lexing_simple() {
     targets.push_back(Token::new(1, 10, TokenType::Assign));
     targets.push_back(Token::new(1, 11, TokenType::Integer(10)));
     assert_eq!(tokens, targets)
+}
+
+#[test]
+fn test_fake_file(){
+    let tokenizer = Tokenizer::new();
+    assert!(tokenizer.lex_file("NOT A REAL FILE LOL.chuda").is_err());
 }

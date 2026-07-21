@@ -732,12 +732,22 @@ mod tests {
 
     #[test]
     fn test_lex_string() {
-        let mut scanner = TokenScanner::new("\"Hello Worl\\x{64}!\"");
-        let mut err_scanner = TokenScanner::new("\"Hello");
-        let mut err_scanner2 = TokenScanner::new("\"");
+        let cases = vec![
+            ("\"Hello Worl\\x{64}!\"", 1, Token::new(1, 1, TokenType::String("Hello World!".to_string()))),
+            ("\"Hello", 1, Token::new(1, 1, TokenType::Error(format!("Expected \" to close String at 1:1",)))),
+            ("\"", 1, Token::new(1, 1, TokenType::Error(format!("Expected \" to close String at 1:1")))),
+            ("\"\\d\"", 1, Token::new(1, 1, TokenType::Error("Unexpected Escape Sequence found: \\d".to_string()))),
+        ];
+        for (input, consume, output) in cases{
+            let mut scanner = TokenScanner::new(input);
+            for i in 0..consume{
+                scanner.consume();
+            }
+            assert_eq!(scanner.lex_string(), output);
+        }
     }
 
-    #[test]
+    // #[test] commented out to ensure good coverage of other things first
     fn test_next_token() {
         let mut scanner: TokenScanner<'_> = TokenScanner::new(&INPUT_TEXT);
         let str_output = "1:1 id i\n\

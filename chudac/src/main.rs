@@ -1,4 +1,4 @@
-//! etac is a crate that runs the compiler for the eta programming language
+//! chudac is a crate that runs the compiler for the chuda programming language
 //! requires the lexer, parser, type checker, IR generator, and assembly generator to function
 
 use lexer::LexerError;
@@ -22,7 +22,7 @@ fn print_help() {
         "Usage: cargo run [options] <source_files>\n\t\
         Where possible options include:\n\t\
         {:<pad_width$} gives a synopsis of useful options\n\t\
-        {:<pad_width$} lexes filename.eta and produces filename.lexed\n\t\
+        {:<pad_width$} lexes filename.chuda and produces filename.lexed\n\t\
         {:<pad_width$} specify where to place generated diagnostic files",
         "--help", "--lex", "-D <path>"
     );

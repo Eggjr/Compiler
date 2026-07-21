@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "etac", 
+    "chudac", 
     "lexer",
 ]
 resolver="3"
