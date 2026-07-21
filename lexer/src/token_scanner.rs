@@ -346,8 +346,8 @@ impl<'a> TokenScanner<'a> {
     /// lexes an integer (sequence of number)
     /// returns an unsigned token representation of the lexed integer as `u64` that may or may not be valid `i32`
     /// may return an error token if it couldn't parse the int to a `u64` successfully
-    fn lex_integer(&mut self, ch: char) -> Token {
-        let first = self.index - ch.len_utf8();
+    fn lex_integer(&mut self) -> Token {
+        let first = self.index - 1;
         let start_col = self.column;
         while let Some(c) = self.stream.peek() {
             if !c.is_ascii_digit() {
@@ -363,7 +363,7 @@ impl<'a> TokenScanner<'a> {
                 Err(e) => {
                     return self.create_token_col(
                         start_col,
-                        TokenType::Error(format!("Trouble Parsing int: {:?}", e)),
+                        TokenType::Error(format!("Trouble Parsing int: {}", e)),
                     );
                 }
             }),
@@ -373,8 +373,8 @@ impl<'a> TokenScanner<'a> {
     /// Lexes a keyword or identifier with maximal munch
     /// returns a token representation of a keyword (`int`, `bool`, `while`, `use`, `return`, `length`, `true`, `false`, `if`, `else`)
     /// or an identifer (variable name, function name)
-    fn lex_key_or_identifier(&mut self, ch: char) -> Token {
-        let first = self.index - ch.len_utf8();
+    fn lex_key_or_identifier(&mut self) -> Token {
+        let first = self.index - 1;
         let start_col = self.column;
         while let Some(c) = self.stream.peek() {
             if !(c.is_ascii_alphanumeric() || *c == '_' || *c == '\'') {
@@ -414,7 +414,6 @@ impl<'a> TokenScanner<'a> {
                 '}' => self.create_token(TokenType::RBrace),
                 ',' => self.create_token(TokenType::Comma),
                 '.' => self.create_token(TokenType::Period),
-                '?' => self.create_token(TokenType::Question),
                 ';' => self.create_token(TokenType::Semicolon),
                 ':' => self.create_token(TokenType::Colon),
                 '+' => self.create_token(TokenType::Plus),
@@ -434,12 +433,11 @@ impl<'a> TokenScanner<'a> {
                 },
                 '\"' => self.lex_string(),
                 '\'' => self.lex_character(),
-                '\n' | '\t' | ' ' => return self.next_token(),
                 other => {
                     if other.is_ascii_digit() {
-                        self.lex_integer(other)
+                        self.lex_integer()
                     } else if other.is_ascii_alphabetic() {
-                        self.lex_key_or_identifier(other)
+                        self.lex_key_or_identifier()
                     } else {
                         self.create_token(TokenType::Error(format!(
                             "Unexpected character: {}",
@@ -836,7 +834,75 @@ mod tests {
         }
     }
 
-    // #[test] commented out to ensure good coverage of other things first
+    #[test]
+    fn test_lex_integer() {
+        let cases = vec![
+            ("10101+", Token::new(1, 1, TokenType::Integer(10101))),
+            ("123", Token::new(1, 1, TokenType::Integer(123))),
+            (
+                "2147483648",
+                Token::new(1, 1, TokenType::Integer(2147483648)),
+            ),
+            (
+                "18446744073709551616",
+                Token::new(
+                    1,
+                    1,
+                    TokenType::Error(
+                        "Trouble Parsing int: number too large to fit in target type".to_string(),
+                    ),
+                ),
+            ),
+        ];
+        for (input, output) in cases {
+            let mut scanner = TokenScanner::new(input);
+            scanner.consume();
+            assert_eq!(scanner.lex_integer(), output);
+        }
+    }
+
+    #[test]
+    fn test_lex_keyword_or_identifier() {
+        let cases = vec![
+            ("x : int", 5, Token::new(1, 5, TokenType::Int)),
+            ("on : bool", 6, Token::new(1, 6, TokenType::Bool)),
+            ("while true {}", 1, Token::new(1, 1, TokenType::While)),
+            ("use io", 1, Token::new(1, 1, TokenType::Use)),
+            ("return ball", 1, Token::new(1, 1, TokenType::Return)),
+            (
+                "if length(arr) == 1",
+                4,
+                Token::new(1, 4, TokenType::Length),
+            ),
+            ("on = true", 6, Token::new(1, 6, TokenType::True)),
+            ("on = false", 6, Token::new(1, 6, TokenType::False)),
+            ("if true{\n}", 1, Token::new(1, 1, TokenType::If)),
+            ("if false{\n}\nelse", 13, Token::new(3, 1, TokenType::Else)),
+            (
+                "intboolwhileusereturnlengthtruefalseifelse",
+                1,
+                Token::new(
+                    1,
+                    1,
+                    TokenType::Identifier("intboolwhileusereturnlengthtruefalseifelse".to_string()),
+                ),
+            ),
+            (
+                "x : int = 5",
+                1,
+                Token::new(1, 1, TokenType::Identifier("x".to_string())),
+            ),
+        ];
+        for (input, consume, output) in cases {
+            let mut scanner = TokenScanner::new(input);
+            for _ in 0..consume {
+                scanner.consume();
+            }
+            assert_eq!(scanner.lex_key_or_identifier(), output);
+        }
+    }
+
+    #[test]
     fn test_next_token() {
         let mut scanner: TokenScanner<'_> = TokenScanner::new(&INPUT_TEXT);
         let str_output = "1:1 id i\n\
@@ -885,5 +951,80 @@ mod tests {
                 .join("\n"),
             str_output
         )
+    }
+
+    #[test]
+    fn rigorous_next_token() {
+        use std::collections::VecDeque;
+        let input = "(){}[],.;:+-%&|_**>>!!=<<=>>====/\t//Comment\n\
+        \"Hello Worl\\x{64}\"\'c\'12345int chicken_nugget\n\
+        int bool true false while return length use if else\
+        \n     ~`?^$#@";
+        let mut outputs = VecDeque::new();
+        outputs.push_back(Token::new(1, 1, TokenType::LParen));
+        outputs.push_back(Token::new(1, 2, TokenType::RParen));
+        outputs.push_back(Token::new(1, 3, TokenType::LBrace));
+        outputs.push_back(Token::new(1, 4, TokenType::RBrace));
+        outputs.push_back(Token::new(1, 5, TokenType::LBracket));
+        outputs.push_back(Token::new(1, 6, TokenType::RBracket));
+        outputs.push_back(Token::new(1, 7, TokenType::Comma));
+        outputs.push_back(Token::new(1, 8, TokenType::Period));
+        outputs.push_back(Token::new(1, 9, TokenType::Semicolon));
+        outputs.push_back(Token::new(1, 10, TokenType::Colon));
+        outputs.push_back(Token::new(1, 11, TokenType::Plus));
+        outputs.push_back(Token::new(1, 12, TokenType::Minus));
+        outputs.push_back(Token::new(1, 13, TokenType::Mod));
+        outputs.push_back(Token::new(1, 14, TokenType::And));
+        outputs.push_back(Token::new(1, 15, TokenType::Or));
+        outputs.push_back(Token::new(1, 16, TokenType::Underscore));
+        outputs.push_back(Token::new(1, 17, TokenType::Times));
+        outputs.push_back(Token::new(1, 18, TokenType::HighMultiplication));
+        outputs.push_back(Token::new(1, 21, TokenType::Exclamation));
+        outputs.push_back(Token::new(1, 22, TokenType::NE));
+        outputs.push_back(Token::new(1, 24, TokenType::LAngle));
+        outputs.push_back(Token::new(1, 25, TokenType::LE));
+        outputs.push_back(Token::new(1, 27, TokenType::RAngle));
+        outputs.push_back(Token::new(1, 28, TokenType::GE));
+        outputs.push_back(Token::new(1, 30, TokenType::EQ));
+        outputs.push_back(Token::new(1, 32, TokenType::Assign));
+        outputs.push_back(Token::new(1, 33, TokenType::Divide));
+        outputs.push_back(Token::new(
+            2,
+            1,
+            TokenType::String("Hello World".to_string()),
+        ));
+        outputs.push_back(Token::new(2, 19, TokenType::Character('c')));
+        outputs.push_back(Token::new(2, 22, TokenType::Integer(12345)));
+        outputs.push_back(Token::new(2, 27, TokenType::Int));
+        outputs.push_back(Token::new(
+            2,
+            31,
+            TokenType::Identifier("chicken_nugget".to_string()),
+        ));
+        outputs.push_back(Token::new(3, 1, TokenType::Int));
+        outputs.push_back(Token::new(3, 5, TokenType::Bool));
+        outputs.push_back(Token::new(3, 10, TokenType::True));
+        outputs.push_back(Token::new(3, 15, TokenType::False));
+        outputs.push_back(Token::new(3, 21, TokenType::While));
+        outputs.push_back(Token::new(3, 27, TokenType::Return));
+        outputs.push_back(Token::new(3, 34, TokenType::Length));
+        outputs.push_back(Token::new(3, 41, TokenType::Use));
+        outputs.push_back(Token::new(3, 45, TokenType::If));
+        outputs.push_back(Token::new(3, 48, TokenType::Else));
+        for (i, c) in vec!['~', '`', '?', '^', '$', '#', '@']
+            .into_iter()
+            .enumerate()
+        {
+            outputs.push_back(Token::new(
+                4,
+                6 + i,
+                TokenType::Error(format!("Unexpected character: {}", c)),
+            ));
+        }
+        let mut scanner = TokenScanner::new(input);
+        while let Some(t) = scanner.next_token() {
+            assert_eq!(t, outputs.pop_front().expect("Nonempty"));
+        }
+        assert_eq!(scanner.next_token(), None);
     }
 }

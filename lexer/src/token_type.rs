@@ -32,7 +32,6 @@ pub enum TokenType {
     Exclamation,        // !
     Period,             // .
     Comma,              // ,
-    Question,           // ?
     Underscore,         // _
     Int,
     Bool,
@@ -81,7 +80,6 @@ impl fmt::Display for TokenType {
             TokenType::Exclamation => String::from("!"),
             TokenType::Period => String::from("."),
             TokenType::Comma => String::from(","),
-            TokenType::Question => String::from("?"),
             TokenType::Underscore => String::from("_"),
             TokenType::Int => String::from("int"),
             TokenType::Bool => String::from("bool"),
