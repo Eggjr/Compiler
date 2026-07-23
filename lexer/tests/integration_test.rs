@@ -1,13 +1,16 @@
 use lexer::*;
 use pretty_assertions::assert_eq;
 use std::collections::VecDeque;
+use std::fs;
+use std::io::Write;
 
 #[test]
 fn test_lexing_failure() {
     let tokenizer = Tokenizer::new();
-    let tokens = tokenizer
-        .lex_file("../chuda_programs/lexer_files/lex_test_2.chuda")
-        .expect("Lexing Failure");
+    let tokens = tokenizer.lex_file(
+        &fs::read_to_string("../chuda_programs/lexer_files/lex_test_2.chuda")
+            .expect("No file found"),
+    );
     let mut targets = VecDeque::new();
 
     targets.push_back(Token::new(1, 1, TokenType::Identifier("x".to_string())));
@@ -29,9 +32,10 @@ fn test_lexing_failure() {
 #[test]
 fn test_lexing_simple() {
     let tokenizer = Tokenizer::new();
-    let tokens = tokenizer
-        .lex_file("../chuda_programs/lexer_files/lex_test_3.chuda")
-        .expect("Lexing Failure");
+    let tokens = tokenizer.lex_file(
+        &fs::read_to_string("../chuda_programs/lexer_files/lex_test_3.chuda")
+            .expect("File Not Found"),
+    );
     let mut targets: VecDeque<Token> = VecDeque::new();
     targets.push_back(Token::new(1, 1, TokenType::Identifier("Pizza".to_string())));
     targets.push_back(Token::new(1, 6, TokenType::Colon));
@@ -44,8 +48,10 @@ fn test_lexing_simple() {
 #[test]
 fn test_lex_multiple() {
     let (tokens, errs) = lexer::lex_files(&vec![
-        "../chuda_programs/lexer_files/lex_test_3.chuda".to_string(),
-        "../chuda_programs/lexer_files/all_tokens.chuda".to_string(),
+        fs::read_to_string("../chuda_programs/lexer_files/lex_test_3.chuda".to_string())
+            .expect("File Not Found"),
+        fs::read_to_string("../chuda_programs/lexer_files/all_tokens.chuda".to_string())
+            .expect("File Not Found"),
     ]);
     let mut targets: VecDeque<Token> = VecDeque::new();
     targets.push_back(Token::new(1, 1, TokenType::Identifier("Pizza".to_string())));
@@ -122,12 +128,6 @@ fn test_lex_multiple() {
 }
 
 #[test]
-fn test_fake_file() {
-    let tokenizer = Tokenizer::new();
-    assert!(tokenizer.lex_file("NOT A REAL FILE LOL.chuda").is_err());
-}
-
-#[test]
 fn test_lex_all_tokens() {
     let mut outputs = vec![];
     outputs.push("1:1 (".to_string());
@@ -174,13 +174,15 @@ fn test_lex_all_tokens() {
     outputs.push("3:48 else".to_string());
     outputs.push("4:6 error: Unexpected character: ~".to_string());
     let tokenizer = Tokenizer::new();
-    let mut tokens = tokenizer
-        .lex_file("../chuda_programs/lexer_files/all_tokens.chuda")
-        .expect("Lexing failed");
+    let source_text =
+        fs::read_to_string("../chuda_programs/lexer_files/all_tokens.chuda").expect("Read Error");
+    let mut tokens = tokenizer.lex_file(&source_text);
     dbg!(&tokens);
     dbg!(&outputs);
     let mut buffer = vec![];
-    lexer::write_tokens(&mut tokens, &mut buffer).expect("Write Failure");
+    while let Some(item) = tokens.pop_front() {
+        writeln!(buffer, "{}", item).expect("Write Failure")
+    }
     dbg!(&buffer);
     let mut output_string = outputs.join("\n");
     output_string.push('\n');

@@ -8,8 +8,6 @@ use std::process;
 
 mod file_utils;
 
-use crate::file_utils::CompilerError;
-
 fn main() {
     let config = Config::build(env::args().collect());
     config.handle_config()
@@ -22,9 +20,10 @@ fn print_help() {
         "Usage: cargo run [options] <source_files>\n\t\
         Where possible options include:\n\t\
         {:<pad_width$} gives a synopsis of useful options\n\t\
-        {:<pad_width$} lexes filename.chuda and produces filename.lexed\n\t\
-        {:<pad_width$} specify where to place generated diagnostic files",
-        "--help", "--lex", "-D <path>"
+        {:<pad_width$} lexes <source_files.chuda/chudi> and produces file_name.lexed for each file\n\t\
+        {:<pad_width$} specify where to place generated diagnostic files\n\t\
+        {:<pad_width$} specify where to find <source_files>",
+        "--help", "--lex", "-D <path>", "-source_path <path>"
     );
     process::exit(1);
 }
@@ -48,6 +47,7 @@ struct Config {
     type_check: bool,
     path: PathBuf,
     source_files: Vec<String>,
+    source_path: PathBuf,
 }
 
 impl Config {
@@ -69,21 +69,14 @@ impl Config {
             parse: false,
             type_check: false,
             code_gen: false,
-            path: match env::current_dir() {
-                Ok(p) => p,
-                Err(e) => {
-                    eprintln!(
-                        "Could not get current directory. Insufficient permissions: {}",
-                        e
-                    );
-                    process::exit(1);
-                }
-            },
+            path: PathBuf::from(""),
             source_files: vec![],
+            source_path: PathBuf::from(""),
         };
         let mut i = 1;
         let mut seen_file = false;
-        let mut updated_path = false;
+        let mut updated_output_path = false;
+        let mut updated_source_path = false;
         while i < args.len() {
             match args[i].as_str() {
                 "--help" if handle_option_after_file(seen_file) => {
@@ -92,14 +85,27 @@ impl Config {
                 "--lex" if handle_option_after_file(seen_file) => {
                     config.lex = true;
                 }
+                "-source_path" if handle_option_after_file(seen_file) => {
+                    if updated_source_path {
+                        eprintln!(
+                            "Option: \"-source_path <path>\" was already passed and can only be passed once"
+                        );
+                        process::exit(1);
+                    }
+                    updated_source_path = true;
+                    i += 1;
+                    if i < args.len() {
+                        config.source_path = PathBuf::from(&args[i]);
+                    }
+                }
                 "-D" if handle_option_after_file(seen_file) => {
-                    if updated_path {
+                    if updated_output_path {
                         eprintln!(
                             "Option: \"-D <path>\" was already passed and can only be passed once"
                         );
                         process::exit(1);
                     }
-                    updated_path = true;
+                    updated_output_path = true;
                     i += 1;
                     if i < args.len() {
                         config.path = PathBuf::from(&args[i]);
@@ -111,6 +117,30 @@ impl Config {
                 }
             }
             i += 1;
+        }
+        if !updated_output_path {
+            config.path = match env::current_dir() {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!(
+                        "Could not get current directory. Insufficient permissions: {}",
+                        e
+                    );
+                    process::exit(1);
+                }
+            }
+        }
+        if !updated_source_path {
+            config.path = match env::current_dir() {
+                Ok(p) => p,
+                Err(e) => {
+                    eprintln!(
+                        "Could not get current directory. Insufficient permissions: {}",
+                        e
+                    );
+                    process::exit(1);
+                }
+            }
         }
         config
     }
@@ -129,20 +159,30 @@ impl Config {
             let files =
                 match file_utils::verify_and_construct(&self.source_files, self.path, "lexed") {
                     Ok(files) => files,
-                    Err(CompilerError::InvalidFilesError(invalids)) => {
-                        eprintln!("Invalid files given: {:?}", invalids);
+                    Err(e) => {
+                        eprintln!("{}", e);
                         process::exit(1);
                     }
                 };
-            let (tokens, errors) = lexer::lex_files(&self.source_files);
-            for (mut token_stream, path) in tokens.into_iter().zip(files) {
-                let file_name = match &path.as_os_str().to_str() {
-                    Some(name) => name,
-                    None => "<Could not get file name, it was invalid UTF-8>",
+            let source_texts =
+                match file_utils::read_source_files(&self.source_files, self.source_path) {
+                    Ok(texts) => texts,
+                    Err(v) => {
+                        for err in v {
+                            eprintln!("{}", err);
+                        }
+                        process::exit(1);
+                    }
                 };
+            let (tokens, errors) = lexer::lex_files(&source_texts);
+            for (mut token_stream, path) in tokens.into_iter().zip(files) {
                 let mut file = match file_utils::safe_create_file(&path) {
                     Ok(file) => file,
                     Err(e) => {
+                        let file_name = path
+                            .as_os_str()
+                            .to_str()
+                            .unwrap_or("<Could not get file name, it was invalid UTF-8>");
                         eprintln!(
                             "Tried writer to file {} but failed with error {:?}",
                             file_name, e
@@ -150,7 +190,11 @@ impl Config {
                         process::exit(1);
                     }
                 };
-                if let Err(e) = lexer::write_tokens(&mut token_stream, &mut file) {
+                if let Err(e) = file_utils::write_deque(&mut token_stream, &mut file) {
+                    let file_name = path
+                        .as_os_str()
+                        .to_str()
+                        .unwrap_or("<Could not get file name, it was invalid UTF-8>");
                     eprintln!(
                         "Tried writing to file {}, but failed with error: {:?}",
                         file_name, e
@@ -161,12 +205,7 @@ impl Config {
             if let Some(errs) = errors {
                 for e in errs {
                     match e {
-                        LexerError::IOReadError(file, error) => eprintln!(
-                            "Tried reading file: {}, but failed with error: {}",
-                            file, error
-                        ),
                         LexerError::ErrorToken(msg) => eprintln!("{}", msg),
-                        e => eprintln!("Should not have gotten this error but got {:?}", e),
                     }
                 }
                 process::exit(1);
