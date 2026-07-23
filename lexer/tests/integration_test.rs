@@ -86,7 +86,7 @@ fn test_lex_multiple() {
         1,
         TokenType::String("Hello World".to_string()),
     ));
-    targets2.push_back(Token::new(2, 19, TokenType::Character('c')));
+    targets2.push_back(Token::new(2, 19, TokenType::Character("c".to_string())));
     targets2.push_back(Token::new(2, 22, TokenType::Integer(12345)));
     targets2.push_back(Token::new(2, 27, TokenType::Int));
     targets2.push_back(Token::new(

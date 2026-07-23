@@ -198,18 +198,18 @@ impl<'a> TokenScanner<'a> {
     }
 
     /// Processes escape sequence and returns corresponding character or error message if failure occurred
-    fn process_escape(&mut self) -> Result<char, String> {
+    fn process_escape(&mut self) -> Result<String, String> {
         match self.consume() {
             Some('x') => match self.hex_to_char() {
-                Ok(c) => Ok(c),
+                Ok(c) => Ok(c.to_string()),
                 Err(UnexpectedHexEscape(e)) => Err(e.to_string())
             },
-            Some('n') => Ok('\n'),
-            Some('r') => Ok('\r'),
-            Some('t') => Ok('\t'),
-            Some('\'') => Ok('\''),
-            Some('\"') => Ok('\"'),
-            Some('\\') => Ok('\\'),
+            Some('n') => Ok("\\n".to_string()),
+            Some('r') => Ok("\\r".to_string()),
+            Some('t') => Ok("\\t".to_string()),
+            Some('\'') => Ok("\\\'".to_string()),
+            Some('\"') => Ok("\\\"".to_string()),
+            Some('\\') => Ok("\\\\".to_string()),
             Some(c) => Err(format!("Unexpected Escape Sequence found: \\{}", c)),
             None => Err("Unfinished Escape Seqeunce. Expected literal to terminate with <escape>\' but got nothing".to_string())
         }
@@ -230,7 +230,7 @@ impl<'a> TokenScanner<'a> {
                     TokenType::Error(String::from("No Character Given")),
                 );
             }
-            Some(c) => c,
+            Some(c) => c.to_string(),
             None => {
                 return self.create_token_col(
                     start_col,
@@ -272,7 +272,9 @@ impl<'a> TokenScanner<'a> {
                     return self.create_token_col(start_col, TokenType::String(contents));
                 }
                 '\\' => match self.process_escape() {
-                    Ok(c) => contents.push(c),
+                    Ok(c) => {
+                        contents.push_str(&c);
+                    }
                     Err(msg) => return self.create_token_col(start_col, TokenType::Error(msg)),
                 },
                 _ => contents.push(c),
@@ -650,24 +652,24 @@ mod tests {
     #[test]
     fn test_lex_char() {
         let cases = vec![
-            (r#"'\n'"#, 1 ,Token::new(1, 1, TokenType::Character('\n'))),
+            (r#"'\n'"#, 1 ,Token::new(1, 1, TokenType::Character("\\n".to_string()))),
             (r#"'\t'"#, 1, 
-                Token::new(1, 1, TokenType::Character('\t'))
+                Token::new(1, 1, TokenType::Character("\\t".to_string()))
             ),
             (r#"'\r'"#, 1, 
-                Token::new(1, 1, TokenType::Character('\r'))
+                Token::new(1, 1, TokenType::Character("\\r".to_string()))
             ),
             (r#"'\''"#, 1, 
-                Token::new(1, 1, TokenType::Character('\''))
+                Token::new(1, 1, TokenType::Character("\\'".to_string()))
             ),
             (r#"'\"'"#, 1, 
-                Token::new(1, 1, TokenType::Character('\"'))
+                Token::new(1, 1, TokenType::Character("\\\"".to_string()))
             ),
             (r#"'\\'"#, 1, 
-                Token::new(1, 1, TokenType::Character('\\'))
+                Token::new(1, 1, TokenType::Character("\\\\".to_string()))
             ),
             (r#"'\x{64}'"#, 1, 
-                Token::new(1, 1, TokenType::Character('d'))
+                Token::new(1, 1, TokenType::Character("d".to_string()))
             ),
             ("\'\'", 1, Token::new(1, 1, TokenType::Error("No Character Given".to_string()))),
             ("\'\\b\'", 1,
@@ -715,7 +717,7 @@ mod tests {
                 )
             ),
             ("\'z\'", 1,
-                Token::new(1, 1, TokenType::Character('z'))
+                Token::new(1, 1, TokenType::Character("z".to_string()))
             ),
         ];
         for (input, consume, output) in cases {
@@ -731,9 +733,9 @@ mod tests {
     fn test_lex_string() {
         let cases = vec![
             (
-                "\"Hello Worl\\x{64}!\"",
+                "\"Hello Worl\\x{64}!\\n\"",
                 1,
-                Token::new(1, 1, TokenType::String("Hello World!".to_string())),
+                Token::new(1, 1, TokenType::String("Hello World!\\n".to_string())),
             ),
             (
                 "\"Hello",
@@ -993,7 +995,7 @@ mod tests {
             1,
             TokenType::String("Hello World".to_string()),
         ));
-        outputs.push_back(Token::new(2, 19, TokenType::Character('c')));
+        outputs.push_back(Token::new(2, 19, TokenType::Character("c".to_string())));
         outputs.push_back(Token::new(2, 22, TokenType::Integer(12345)));
         outputs.push_back(Token::new(2, 27, TokenType::Int));
         outputs.push_back(Token::new(

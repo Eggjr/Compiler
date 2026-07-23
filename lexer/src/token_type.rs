@@ -4,7 +4,7 @@ use std::fmt;
 pub enum TokenType {
     Identifier(String),
     Integer(u64),
-    Character(char),
+    Character(String),
     String(String),
     LParen,             // (
     RParen,             // )

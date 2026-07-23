@@ -81,7 +81,7 @@ impl Config {
             },
             source_files: vec![],
         };
-        let mut i = 0;
+        let mut i = 1;
         let mut seen_file = false;
         let mut updated_path = false;
         while i < args.len() {
