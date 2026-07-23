@@ -66,13 +66,9 @@ pub fn write_tokens<W: std::io::Write>(
 /// tokens.push_back(Token::new(1, 11, TokenType::Integer(10)));
 /// let vec_tokens = vec![tokens];
 ///
-/// let tokens = match lexer::lex_files(&vec!["../chuda_programs/lexer_files/lex_test_3.chuda".to_string()]){
-///     Ok(v) => v,
-///     Err(e) => {
-///         panic!("Lexing Failed")
-///     },
-/// };
+/// let (tokens, errs) = lexer::lex_files(&vec!["../chuda_programs/lexer_files/lex_test_3.chuda".to_string()]);
 /// assert_eq!(tokens, vec_tokens);
+/// assert!(errs.is_none());
 /// ```
 ///
 /// # Errors
@@ -80,7 +76,7 @@ pub fn write_tokens<W: std::io::Write>(
 /// returns `Vec<LexerError>` upon failure to verify files, or upon termination if any files had
 /// an error token written to them, dchudailing where the errors can be viewed and giving a brief
 /// description of the errors
-pub fn lex_files(source_files: &[String]) -> Result<Vec<VecDeque<Token>>, Vec<LexerError>> {
+pub fn lex_files(source_files: &[String]) -> (Vec<VecDeque<Token>>, Option<Vec<LexerError>>) {
     let mut err_vec = vec![];
     let mut token_queues: Vec<VecDeque<Token>> = vec![];
     for input_file in source_files {
@@ -98,7 +94,7 @@ pub fn lex_files(source_files: &[String]) -> Result<Vec<VecDeque<Token>>, Vec<Le
         };
     }
     if !err_vec.is_empty() {
-        return Err(err_vec);
+        return (token_queues, Some(err_vec));
     }
-    Ok(token_queues)
+    (token_queues, None)
 }

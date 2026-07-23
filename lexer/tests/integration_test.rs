@@ -42,6 +42,86 @@ fn test_lexing_simple() {
 }
 
 #[test]
+fn test_lex_multiple() {
+    let (tokens, errs) = lexer::lex_files(&vec![
+        "../chuda_programs/lexer_files/lex_test_3.chuda".to_string(),
+        "../chuda_programs/lexer_files/all_tokens.chuda".to_string(),
+    ]);
+    let mut targets: VecDeque<Token> = VecDeque::new();
+    targets.push_back(Token::new(1, 1, TokenType::Identifier("Pizza".to_string())));
+    targets.push_back(Token::new(1, 6, TokenType::Colon));
+    targets.push_back(Token::new(1, 7, TokenType::Int));
+    targets.push_back(Token::new(1, 10, TokenType::Assign));
+    targets.push_back(Token::new(1, 11, TokenType::Integer(10)));
+    let mut targets2 = VecDeque::new();
+    targets2.push_back(Token::new(1, 1, TokenType::LParen));
+    targets2.push_back(Token::new(1, 2, TokenType::RParen));
+    targets2.push_back(Token::new(1, 3, TokenType::LBrace));
+    targets2.push_back(Token::new(1, 4, TokenType::RBrace));
+    targets2.push_back(Token::new(1, 5, TokenType::LBracket));
+    targets2.push_back(Token::new(1, 6, TokenType::RBracket));
+    targets2.push_back(Token::new(1, 7, TokenType::Comma));
+    targets2.push_back(Token::new(1, 8, TokenType::Period));
+    targets2.push_back(Token::new(1, 9, TokenType::Semicolon));
+    targets2.push_back(Token::new(1, 10, TokenType::Colon));
+    targets2.push_back(Token::new(1, 11, TokenType::Plus));
+    targets2.push_back(Token::new(1, 12, TokenType::Minus));
+    targets2.push_back(Token::new(1, 13, TokenType::Mod));
+    targets2.push_back(Token::new(1, 14, TokenType::And));
+    targets2.push_back(Token::new(1, 15, TokenType::Or));
+    targets2.push_back(Token::new(1, 16, TokenType::Underscore));
+    targets2.push_back(Token::new(1, 17, TokenType::Times));
+    targets2.push_back(Token::new(1, 18, TokenType::HighMultiplication));
+    targets2.push_back(Token::new(1, 21, TokenType::Exclamation));
+    targets2.push_back(Token::new(1, 22, TokenType::NE));
+    targets2.push_back(Token::new(1, 24, TokenType::LAngle));
+    targets2.push_back(Token::new(1, 25, TokenType::LE));
+    targets2.push_back(Token::new(1, 27, TokenType::RAngle));
+    targets2.push_back(Token::new(1, 28, TokenType::GE));
+    targets2.push_back(Token::new(1, 30, TokenType::EQ));
+    targets2.push_back(Token::new(1, 32, TokenType::Assign));
+    targets2.push_back(Token::new(1, 33, TokenType::Divide));
+    targets2.push_back(Token::new(
+        2,
+        1,
+        TokenType::String("Hello World".to_string()),
+    ));
+    targets2.push_back(Token::new(2, 19, TokenType::Character('c')));
+    targets2.push_back(Token::new(2, 22, TokenType::Integer(12345)));
+    targets2.push_back(Token::new(2, 27, TokenType::Int));
+    targets2.push_back(Token::new(
+        2,
+        31,
+        TokenType::Identifier("chicken_nugget".to_string()),
+    ));
+    targets2.push_back(Token::new(3, 1, TokenType::Int));
+    targets2.push_back(Token::new(3, 5, TokenType::Bool));
+    targets2.push_back(Token::new(3, 10, TokenType::True));
+    targets2.push_back(Token::new(3, 15, TokenType::False));
+    targets2.push_back(Token::new(3, 21, TokenType::While));
+    targets2.push_back(Token::new(3, 27, TokenType::Return));
+    targets2.push_back(Token::new(3, 34, TokenType::Length));
+    targets2.push_back(Token::new(3, 41, TokenType::Use));
+    targets2.push_back(Token::new(3, 45, TokenType::If));
+    targets2.push_back(Token::new(3, 48, TokenType::Else));
+    targets2.push_back(Token::new(
+        4,
+        6,
+        TokenType::Error("Unexpected character: ~".to_string()),
+    ));
+    let outputs = vec![targets, targets2];
+    for (mut result, mut goal) in tokens.into_iter().zip(outputs) {
+        assert_eq!(result.len(), goal.len());
+        while let Some(t) = result.pop_front()
+            && let Some(g) = goal.pop_front()
+        {
+            assert_eq!(t, g);
+        }
+    }
+    assert!(errs.is_some())
+}
+
+#[test]
 fn test_fake_file() {
     let tokenizer = Tokenizer::new();
     assert!(tokenizer.lex_file("NOT A REAL FILE LOL.chuda").is_err());

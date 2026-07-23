@@ -134,22 +134,7 @@ impl Config {
                         process::exit(1);
                     }
                 };
-            let tokens = match lexer::lex_files(&self.source_files) {
-                Err(errors) => {
-                    for e in errors {
-                        match e {
-                            LexerError::IOReadError(file, error) => eprintln!(
-                                "Tried reading file: {}, but failed with error: {}",
-                                file, error
-                            ),
-                            LexerError::ErrorToken(msg) => eprintln!("{}", msg),
-                            e => eprintln!("Should not have gotten this error but got {:?}", e),
-                        }
-                    }
-                    process::exit(1);
-                }
-                Ok(t) => t,
-            };
+            let (tokens, errors) = lexer::lex_files(&self.source_files);
             for (mut token_stream, path) in tokens.into_iter().zip(files) {
                 let file_name = match &path.as_os_str().to_str() {
                     Some(name) => name,
@@ -173,6 +158,19 @@ impl Config {
                     process::exit(1);
                 }
             }
+            if let Some(errs) = errors {
+                for e in errs {
+                    match e {
+                        LexerError::IOReadError(file, error) => eprintln!(
+                            "Tried reading file: {}, but failed with error: {}",
+                            file, error
+                        ),
+                        LexerError::ErrorToken(msg) => eprintln!("{}", msg),
+                        e => eprintln!("Should not have gotten this error but got {:?}", e),
+                    }
+                }
+                process::exit(1);
+            };
         } else if self.parse {
             unimplemented!("I haven't implemented this yet.");
         } else if self.type_check {
