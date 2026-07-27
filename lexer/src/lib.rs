@@ -31,6 +31,7 @@ pub use tokenizer::Tokenizer;
 /// tokens.push_back(Token::new(1, 7, TokenType::Int));
 /// tokens.push_back(Token::new(1, 10, TokenType::Assign));
 /// tokens.push_back(Token::new(1, 11, TokenType::Integer(10)));
+/// tokens.push_back(Token::new(1, 13, TokenType::Eof));
 /// let vec_tokens = vec![tokens];
 ///
 /// let (tokens, errs) = lexer::lex_files(&vec![fs::read_to_string("../chuda_programs/lexer_files/lex_test_3.chuda".to_string()).expect("Read Failure")], );

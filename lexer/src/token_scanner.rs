@@ -404,7 +404,7 @@ impl<'a> TokenScanner<'a> {
     /// Produces the next token from the input text
     /// returns 'Some(token)' if there is one or 'None' if no tokens are left
     /// Token produced may be an error token
-    pub(crate) fn next_token(&mut self) -> Option<Token> {
+    pub(crate) fn next_token(&mut self) -> Token {
         self.remove_whitespace();
         if let Some(c) = self.consume() {
             let token = match c {
@@ -448,9 +448,9 @@ impl<'a> TokenScanner<'a> {
                     }
                 }
             };
-            return Some(token);
+            return token;
         }
-        None
+        self.create_token_col(self.column + 1, TokenType::Eof)
     }
 }
 
@@ -942,7 +942,7 @@ mod tests {
             4:20 )\
         ";
         let mut tokens = vec![];
-        while let Some(t) = scanner.next_token() {
+        while let t = scanner.next_token() && *t.token_type() != TokenType::Eof{
             tokens.push(t);
         }
         assert_eq!(
@@ -1024,9 +1024,9 @@ mod tests {
             ));
         }
         let mut scanner = TokenScanner::new(input);
-        while let Some(t) = scanner.next_token() {
+        while let t = scanner.next_token() && *t.token_type() != TokenType::Eof{
             assert_eq!(t, outputs.pop_front().expect("Nonempty"));
         }
-        assert_eq!(scanner.next_token(), None);
+        assert_eq!(scanner.next_token(), Token::new(4, 13, TokenType::Eof));
     }
 }

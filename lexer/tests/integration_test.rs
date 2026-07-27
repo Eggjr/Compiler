@@ -42,6 +42,7 @@ fn test_lexing_simple() {
     targets.push_back(Token::new(1, 7, TokenType::Int));
     targets.push_back(Token::new(1, 10, TokenType::Assign));
     targets.push_back(Token::new(1, 11, TokenType::Integer(10)));
+    targets.push_back(Token::new(1, 13, TokenType::Eof));
     assert_eq!(tokens, targets)
 }
 
@@ -59,6 +60,7 @@ fn test_lex_multiple() {
     targets.push_back(Token::new(1, 7, TokenType::Int));
     targets.push_back(Token::new(1, 10, TokenType::Assign));
     targets.push_back(Token::new(1, 11, TokenType::Integer(10)));
+    targets.push_back(Token::new(1, 13, TokenType::Eof));
     let mut targets2 = VecDeque::new();
     targets2.push_back(Token::new(1, 1, TokenType::LParen));
     targets2.push_back(Token::new(1, 2, TokenType::RParen));
@@ -117,6 +119,8 @@ fn test_lex_multiple() {
     ));
     let outputs = vec![targets, targets2];
     for (mut result, mut goal) in tokens.into_iter().zip(outputs) {
+        dbg!(&result);
+        dbg!(&goal);
         assert_eq!(result.len(), goal.len());
         while let Some(t) = result.pop_front()
             && let Some(g) = goal.pop_front()

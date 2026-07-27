@@ -44,6 +44,7 @@ pub enum TokenType {
     Return,
     Length,
     Error(String),
+    Eof //End of File
 }
 
 impl fmt::Display for TokenType {
@@ -92,6 +93,7 @@ impl fmt::Display for TokenType {
             TokenType::Return => String::from("return"),
             TokenType::Length => String::from("length"),
             TokenType::Error(msg) => format!("error: {}", msg),
+            TokenType::Eof => String::from("")
         };
         write!(f, "{}", to_write)
     }

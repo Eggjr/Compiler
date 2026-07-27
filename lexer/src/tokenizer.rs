@@ -22,12 +22,15 @@ impl Tokenizer {
     /// return `LexerError::IOReadError` if it could not read `input_file`
     pub fn lex_file(mut self, source_text: &str) -> VecDeque<Token> {
         let mut scanner: TokenScanner = TokenScanner::new(source_text);
-        while let Some(token) = scanner.next_token() {
-            if let TokenType::Error(_) = token.token_type() {
-                self.tokens.push_back(token);
-                break;
+        loop {
+            let token = scanner.next_token();
+            match token.token_type(){
+                TokenType::Error(_) | TokenType::Eof =>{
+                    self.tokens.push_back(token);
+                    break;
+                },
+                _ => self.tokens.push_back(token)
             }
-            self.tokens.push_back(token);
         }
         self.tokens
     }
