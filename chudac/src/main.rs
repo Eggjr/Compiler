@@ -85,6 +85,9 @@ impl Config {
                 "--lex" if handle_option_after_file(seen_file) => {
                     config.lex = true;
                 }
+                "--lex" if handle_option_after_file(seen_file) => {
+                    config.parse = true;
+                }
                 "-source_path" if handle_option_after_file(seen_file) => {
                     if updated_source_path {
                         eprintln!(

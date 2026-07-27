@@ -31,6 +31,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "parser_generator"
+version = "0.1.0"
+
+[[package]]
 name = "pretty_assertions"
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
