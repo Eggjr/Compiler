@@ -44,7 +44,7 @@ pub enum TokenType {
     Return,
     Length,
     Error(String),
-    Eof //End of File
+    Eof                 // End of File
 }
 
 impl fmt::Display for TokenType {
